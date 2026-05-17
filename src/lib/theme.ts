@@ -1,0 +1,33 @@
+﻿export const COLORS = {
+  primary:      '#208AEF',
+  primaryMid:   '#90C5F7',
+  primaryLight: '#E6F4FE',
+  onPrimary:    '#FFFFFF',
+  background:   '#F5F7FA',
+  surface:      '#F0F4F8',
+  white:        '#FFFFFF',
+  border:       '#E2E8F0',
+  textPrimary:  '#1A202C',
+  textSecondary:'#4A5568',
+  textMuted:    '#A0AEC0',
+  given:        '#1D9E75',
+  givenLight:   '#E1F5EE',
+  missed:       '#E24B4A',
+  missedLight:  '#FCEBEB',
+  due:          '#BA7517',
+  dueLight:     '#FAEEDA',
+  upcoming:     '#534AB7',
+  upcomingLight:'#EEEDFE',
+  card1:        '#E6F4FE',
+  card2:        '#E1F5EE',
+  card3:        '#FAEEDA',
+  card4:        '#EEEDFE',
+};
+
+export const RADIUS = {
+  sm:   4,
+  md:   8,
+  lg:   12,
+  xl:   16,
+  full: 9999,
+};
