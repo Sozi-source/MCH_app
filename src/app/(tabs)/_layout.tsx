@@ -39,7 +39,7 @@ export default function TabLayout() {
           marginHorizontal: 16,
           borderRadius: 20,
           position: 'absolute',
-          bottom: 4,
+          bottom: 0,
           elevation: 8,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 4 },
