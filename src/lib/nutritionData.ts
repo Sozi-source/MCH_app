@@ -460,6 +460,7 @@ export function getZScoreAlerts(
   waz: number | null,
   haz: number | null,
   whz: number | null,
+  ageMonths: number = 12,
 ): ActiveAlert[] {
   const scores: { indicator: ZIndicator; value: number | null }[] = [
     { indicator: 'WHZ', value: whz },
@@ -481,11 +482,54 @@ export function getZScoreAlerts(
     })[0];
 
     if (matched) {
+      let action = matched.action;
+
+      // Age-sensitive action overrides
+      if (ageMonths < 6) {
+        // Under 6 months: exclusive breastfeeding period — no complementary food advice
+        if (matched.indicator === 'WHZ' && matched.urgency === 'urgent') {
+          action = 'Your baby is under 6 months and showing signs of acute malnutrition. Increase breastfeeding frequency immediately — feed on demand at least 10-12 times per day including at night. Do NOT give any other foods or fluids. Refer to the nearest MCH clinic or hospital TODAY for therapeutic assessment.';
+        } else if (matched.indicator === 'WAZ' && matched.urgency === 'urgent') {
+          action = 'Your baby is under 6 months and severely underweight. This requires urgent review. Ensure exclusive breastfeeding on demand (no water, no formula, no porridge). Go to the nearest MCH clinic or hospital immediately — the baby may need inpatient nutritional support.';
+        } else if (matched.indicator === 'HAZ') {
+          action = 'Stunting at this age reflects poor nutrition before or shortly after birth. Ensure the mother is eating well and breastfeeding exclusively on demand. Attend your next MCH clinic visit and inform the nurse.';
+        } else if (matched.urgency === 'monitor') {
+          action = 'Continue exclusive breastfeeding on demand. Monitor weight weekly at home or at the MCH clinic. No complementary foods should be introduced before 6 months.';
+        }
+      } else if (ageMonths < 12) {
+        // 6–11 months: just starting complementary foods
+        if (matched.indicator === 'WHZ' && matched.urgency === 'urgent') {
+          action = 'Your baby has acute malnutrition. Continue breastfeeding on demand AND increase complementary meal frequency to 3-4 times per day. Add energy-dense foods: mashed liver, eggs, groundnut paste, mashed beans with oil. Refer to MCH clinic immediately for enrolment in the Supplementary Feeding Programme (SFP).';
+        } else if (matched.indicator === 'WAZ' && matched.urgency === 'urgent') {
+          action = 'Your baby is severely underweight. Breastfeed on demand AND offer 3-4 complementary meals daily. Focus on iron-rich foods (mashed liver once a week, eggs, beans) and always add a teaspoon of oil to every meal. Go to the MCH clinic immediately.';
+        } else if (matched.indicator === 'HAZ') {
+          action = 'Stunting at this age means your baby has had prolonged inadequate nutrition. Increase meal frequency to 3 times per day, add variety across all 7 food groups, and continue breastfeeding. Visit the MCH clinic for a full nutritional assessment.';
+        } else if (matched.urgency === 'monitor') {
+          action = matched.action + ' At this age, continue breastfeeding and ensure 2-3 complementary meals per day with iron-rich foods and added oil or fat.';
+        }
+      } else if (ageMonths < 24) {
+        // 12–23 months: family foods, breastfeeding still important
+        if (matched.indicator === 'WHZ' && matched.urgency === 'urgent') {
+          action = 'Your child has acute malnutrition. Offer 3-4 meals and 1-2 nutritious snacks daily. Include: eggs, mashed liver, groundnut paste, omena, beans, and always add oil to meals. Continue breastfeeding. Refer to MCH clinic immediately for RUTF or SFP assessment.';
+        } else if (matched.indicator === 'WAZ' && matched.urgency === 'urgent') {
+          action = 'Your child is severely underweight. Increase meal frequency to 4 times per day with energy-dense foods. Continue breastfeeding — it still provides up to 50% of energy needs. Visit the MCH clinic urgently.';
+        } else if (matched.urgency === 'monitor') {
+          action = matched.action + ' Ensure your child gets 3 meals and 1-2 snacks daily with foods from all 7 food groups. Continue breastfeeding up to 2 years.';
+        }
+      } else {
+        // 24+ months: toddler diet
+        if (matched.urgency === 'urgent') {
+          action = matched.action + ' At this age, offer 3 main meals and 2 healthy snacks daily. Focus on protein-rich foods (eggs, beans, meat, fish), dark green leafy vegetables, and vitamin A-rich foods. Limit sugary drinks and processed foods.';
+        } else if (matched.urgency === 'monitor') {
+          action = matched.action + ' Ensure dietary variety across all food groups daily. If breastfeeding has stopped, ensure adequate dairy (milk, yoghurt) or calcium-rich alternatives.';
+        }
+      }
+
       alerts.push({
         indicator: matched.indicator,
         threshold: matched.threshold,
         classification: matched.classification,
-        action: matched.action,
+        action,
         urgency: matched.urgency,
       });
     }

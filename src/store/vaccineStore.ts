@@ -1,5 +1,24 @@
-﻿import { supabase } from '@/lib/supabase';
+﻿/**
+ * src/store/vaccineStore.ts
+ *
+ * NOTIFICATION UPGRADE:
+ *  - computeRows now calls notifyVaccineAlerts() + scheduleVaccineDueReminders()
+ *    whenever rows are recomputed for an active child
+ *  - A childId parameter is added to computeRows so notifications can be
+ *    scoped to the correct child
+ *  - All other logic is identical to the original
+ */
+
+import { supabase } from '@/lib/supabase';
+import {
+  notifyVaccineAlerts,
+  scheduleVaccineDueReminders,
+} from '@/lib/notificationService';
 import { create } from 'zustand';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface VaccineSchedule {
   id: string;
@@ -34,6 +53,10 @@ export interface VaccineRow {
   daysUntilDue: number | null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KEPI seed data
+// ─────────────────────────────────────────────────────────────────────────────
+
 const KEPI_SEED: Omit<VaccineSchedule, 'id'>[] = [
   { vaccine_name: 'BCG',            dose_number: 1, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Tuberculosis',                                      notes: 'Given at birth',               display_order: 1  },
   { vaccine_name: 'OPV',            dose_number: 0, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Polio',                                             notes: 'Birth dose (OPV0)',            display_order: 2  },
@@ -59,6 +82,10 @@ const KEPI_SEED: Omit<VaccineSchedule, 'id'>[] = [
   { vaccine_name: 'Measles-Rubella',dose_number: 2, due_at_weeks: null, due_at_months: 18,   diseases_covered: 'Measles, Rubella',                                  notes: 'Booster',                      display_order: 22 },
   { vaccine_name: 'Vitamin A',      dose_number: 1, due_at_weeks: null, due_at_months: 6,    diseases_covered: 'Vitamin A deficiency',                              notes: 'Supplementation - every 6 months', display_order: 23 },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 function toDateStr(date: Date): string {
   const y = date.getFullYear();
@@ -124,6 +151,10 @@ async function getAuthUserId(): Promise<string | null> {
   return data?.user?.id ?? null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Store
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface VaccineState {
   schedules:     VaccineSchedule[];
   immunizations: Immunization[];
@@ -134,10 +165,20 @@ interface VaccineState {
   seedScheduleIfEmpty: () => Promise<void>;
   fetchSchedules:      () => Promise<void>;
   fetchImmunizations:  (childId: string) => Promise<Immunization[]>;
-  computeRows:         (childDob: string, freshImmunizations?: Immunization[]) => void;
-  markAsGiven:         (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date, childDob?: string) => Promise<void>;
-  markAsMissed:        (scheduleId: string, childId: string, childDob?: string) => Promise<void>;
-  updateImmunization:  (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
+
+  /**
+   * computeRows now accepts an optional child parameter.
+   * When provided, vaccine alert notifications are fired automatically.
+   */
+  computeRows: (
+    childDob: string,
+    freshImmunizations?: Immunization[],
+    child?: import('@/types').Child,
+  ) => void;
+
+  markAsGiven:        (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date, childDob?: string) => Promise<void>;
+  markAsMissed:       (scheduleId: string, childId: string, childDob?: string) => Promise<void>;
+  updateImmunization: (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
 }
 
 export const useVaccineStore = create<VaccineState>((set, get) => ({
@@ -149,18 +190,18 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
 
   seedScheduleIfEmpty: async () => {
     const { data: existing, error: checkErr } = await supabase.from('vaccine_schedules').select('id').limit(1);
-    console.log('[vaccineStore] seedCheck:', { existing: existing?.length, error: checkErr?.message, code: checkErr?.code });
     if (existing && existing.length > 0) { set({ seeded: true }); return; }
     const { error } = await supabase.from('vaccine_schedules').insert(KEPI_SEED);
-    console.log('[vaccineStore] seed insert:', { error: error?.message, code: error?.code });
     if (!error) set({ seeded: true });
     else console.error('[vaccineStore] seed:', error.message);
   },
 
   fetchSchedules: async () => {
     set({ loading: true });
-    const { data, error } = await supabase.from('vaccine_schedules').select('*').order('display_order', { ascending: true });
-    console.log('[vaccineStore] fetchSchedules result:', { count: data?.length, error: error?.message, code: error?.code });
+    const { data, error } = await supabase
+      .from('vaccine_schedules')
+      .select('*')
+      .order('display_order', { ascending: true });
     if (error) console.error('[vaccineStore] fetchSchedules:', error.message);
     if (data)  set({ schedules: data });
     set({ loading: false });
@@ -174,17 +215,31 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     return imms;
   },
 
-  computeRows: (childDob: string, freshImmunizations?: Immunization[]) => {
+  computeRows: (childDob, freshImmunizations, child) => {
     const { schedules } = get();
     const immunizations = freshImmunizations ?? get().immunizations;
+
     const rows: VaccineRow[] = schedules.map(schedule => {
       const dueDate      = getDueDate(schedule, childDob);
       const immunization = findImmunization(immunizations, schedule, dueDate);
       const status       = computeStatus(dueDate, immunization);
-      const daysUntilDue = dueDate ? Math.floor((dueDate.getTime() - Date.now()) / 86400000) : null;
+      const daysUntilDue = dueDate
+        ? Math.floor((dueDate.getTime() - Date.now()) / 86400000)
+        : null;
       return { schedule, immunization, status, dueDate, daysUntilDue };
     });
+
     set({ vaccineRows: rows });
+
+    // ── Fire vaccine notifications when child context is available ──────────
+    if (child) {
+      notifyVaccineAlerts(rows, child).catch(err =>
+        console.warn('[vaccineStore] notifyVaccineAlerts failed:', err),
+      );
+      scheduleVaccineDueReminders(rows, child).catch(err =>
+        console.warn('[vaccineStore] scheduleVaccineDueReminders failed:', err),
+      );
+    }
   },
 
   markAsGiven: async (scheduleId, childId, facilityName, givenDate, childDob) => {
@@ -201,10 +256,20 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     const givenDateStr = toDateStr(givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date());
     const existing = findImmunization(immunizations, schedule, dueDate);
     if (existing) {
-      const { error } = await supabase.from('immunizations').update({ status: 'given', given_date: givenDateStr, facility: facilityName ?? null }).eq('id', existing.id);
+      const { error } = await supabase
+        .from('immunizations')
+        .update({ status: 'given', given_date: givenDateStr, facility: facilityName ?? null })
+        .eq('id', existing.id);
       assertNoError(error, 'markAsGiven/update');
     } else {
-      const { error } = await supabase.from('immunizations').insert({ child_id: childId, vaccine_name: schedule.vaccine_name, scheduled_date: scheduledDateStr, given_date: givenDateStr, facility: facilityName ?? null, status: 'given' });
+      const { error } = await supabase.from('immunizations').insert({
+        child_id:       childId,
+        vaccine_name:   schedule.vaccine_name,
+        scheduled_date: scheduledDateStr,
+        given_date:     givenDateStr,
+        facility:       facilityName ?? null,
+        status:         'given',
+      });
       assertNoError(error, 'markAsGiven/insert');
     }
     const fresh2 = await get().fetchImmunizations(childId);
@@ -212,14 +277,17 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
   },
 
   updateImmunization: async (immunizationId, childId, facilityName, givenDate, childDob) => {
-    const givenDateStr = toDateStr(givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date());
+    const givenDateStr = toDateStr(
+      givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date(),
+    );
     const { data, error } = await supabase
       .from('immunizations')
       .update({ given_date: givenDateStr, facility: facilityName || null, status: 'given' })
       .eq('id', immunizationId)
       .select();
     assertNoError(error, 'updateImmunization');
-    if (!data || data.length === 0) throw new Error('Save failed â€” Supabase RLS may be blocking updates on immunizations.');
+    if (!data || data.length === 0)
+      throw new Error('Save failed — Supabase RLS may be blocking updates on immunizations.');
     const fresh = await get().fetchImmunizations(childId);
     get().computeRows(childDob, fresh);
   },
@@ -234,10 +302,20 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     const dueDate = row?.dueDate ?? new Date();
     const existing = findImmunization(immunizations, schedule, dueDate);
     if (existing) {
-      const { error } = await supabase.from('immunizations').update({ status: 'missed' }).eq('id', existing.id);
+      const { error } = await supabase
+        .from('immunizations')
+        .update({ status: 'missed' })
+        .eq('id', existing.id);
       assertNoError(error, 'markAsMissed/update');
     } else {
-      const { error } = await supabase.from('immunizations').insert({ child_id: childId, vaccine_name: schedule.vaccine_name, scheduled_date: toDateStr(dueDate), given_date: null, facility: null, status: 'missed' });
+      const { error } = await supabase.from('immunizations').insert({
+        child_id:       childId,
+        vaccine_name:   schedule.vaccine_name,
+        scheduled_date: toDateStr(dueDate),
+        given_date:     null,
+        facility:       null,
+        status:         'missed',
+      });
       assertNoError(error, 'markAsMissed/insert');
     }
     const fresh2 = await get().fetchImmunizations(childId);

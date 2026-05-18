@@ -117,7 +117,7 @@ export default function ReportsScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Health Report</Text>
-          <Text style={styles.headerSub}>{child.name}</Text>
+          <Text style={styles.headerSub}>{child.full_name}</Text>
         </View>
         <View style={{ width: 38 }} />
       </View>
@@ -194,14 +194,7 @@ export default function ReportsScreen() {
                   <Text style={[styles.zDesc, { color: whzInfo.color }]}>Weight-for-Height</Text>
                 </View>
               </View>
-              {latest.nutritional_status && (
-                <View style={styles.statusBanner}>
-                  <Ionicons name="shield-checkmark-outline" size={16} color={COLORS.primary} />
-                  <Text style={styles.statusBannerText}>
-                    Overall: <Text style={{ fontWeight: '700' }}>{latest.nutritional_status}</Text>
-                  </Text>
-                </View>
-              )}
+              {/* nutritional_status removed */}
             </>
           ) : (
             <Text style={styles.noData}>No z-scores available</Text>

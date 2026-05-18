@@ -174,7 +174,7 @@ function ZScoreAlertBanner({ alerts }: { alerts: ActiveAlert[] }) {
 
 function RecordCard({ rec, isLatest }: { rec: GrowthRecord; isLatest: boolean }) {
   const t = useT();
-  const alerts = getZScoreAlerts(rec.waz, rec.haz, rec.whz);
+  const alerts = getZScoreAlerts(rec.waz, rec.haz, rec.whz, rec.age_months);
 
   return (
     <View style={[styles.recCard, isLatest && styles.recCardLatest]}>
@@ -239,7 +239,7 @@ function RecordCard({ rec, isLatest }: { rec: GrowthRecord; isLatest: boolean })
 function LatestAlertSummary({ records }: { records: GrowthRecord[] }) {
   if (records.length === 0) return null;
   const latest = records[0];
-  const alerts = getZScoreAlerts(latest.waz, latest.haz, latest.whz);
+  const alerts = getZScoreAlerts(latest.waz, latest.haz, latest.whz, latest.age_months);
   if (alerts.length === 0) {
     return (
       <View style={styles.allGoodBanner}>
