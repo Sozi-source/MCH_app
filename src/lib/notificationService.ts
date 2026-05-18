@@ -8,7 +8,7 @@
  */
 
 import * as Device from 'expo-device';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import type AsyncStorageType from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { getZScoreAlerts } from '@/lib/nutritionData';
 import type { GrowthRecord } from '@/store/childStore';
@@ -24,11 +24,24 @@ let N: typeof NotificationsType | null = null;
 try {
   N = require('expo-notifications') as typeof NotificationsType;
 } catch {
-  console.warn(
-    '[notificationService] expo-notifications native module not available — ' +
-    'notifications disabled. Install the new dev build to enable them.',
-  );
+  console.warn('[notificationService] expo-notifications not available — notifications disabled.');
 }
+
+type AS = typeof AsyncStorageType;
+const _as: AS | null = (() => {
+  try {
+    return require('@react-native-async-storage/async-storage').default as AS;
+  } catch {
+    console.warn('[notificationService] AsyncStorage not available.');
+    return null;
+  }
+})();
+const store = {
+  getItem:     (k: string)         => _as ? _as.getItem(k)           : Promise.resolve(null),
+  setItem:     (k: string, v: string) => _as ? _as.setItem(k, v)    : Promise.resolve(),
+  multiRemove: (keys: string[])    => _as ? _as.multiRemove(keys)    : Promise.resolve(),
+  available:   () => _as !== null,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -127,7 +140,7 @@ export async function setupNotifications(): Promise<string | null> {
       return null;
     }
     const tokenData = await N.getExpoPushTokenAsync({ projectId });
-    await AsyncStorage.setItem(STORAGE_KEYS.PUSH_TOKEN, tokenData.data);
+    await store.setItem(STORAGE_KEYS.PUSH_TOKEN, tokenData.data);
     return tokenData.data;
   } catch (err) {
     console.warn('[notificationService] getExpoPushTokenAsync failed:', err);
@@ -168,7 +181,7 @@ export async function notifyGrowthAlerts(
   const alerts = getZScoreAlerts(record.waz, record.haz, record.whz, record.age_months);
   if (alerts.length === 0) return;
 
-  const sentRaw = await AsyncStorage.getItem(STORAGE_KEYS.SENT_GROWTH_ALERTS);
+  const sentRaw = await store.getItem(STORAGE_KEYS.SENT_GROWTH_ALERTS);
   const sent: Set<string> = new Set(sentRaw ? JSON.parse(sentRaw) : []);
 
   for (const alert of alerts) {
@@ -204,7 +217,7 @@ export async function notifyGrowthAlerts(
     sent.add(key);
   }
 
-  await AsyncStorage.setItem(STORAGE_KEYS.SENT_GROWTH_ALERTS, JSON.stringify([...sent]));
+  await store.setItem(STORAGE_KEYS.SENT_GROWTH_ALERTS, JSON.stringify([...sent]));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,7 +230,7 @@ export async function notifyVaccineAlerts(
 ): Promise<void> {
   if (!N) return;
 
-  const sentRaw = await AsyncStorage.getItem(STORAGE_KEYS.SENT_VACCINE_ALERTS);
+  const sentRaw = await store.getItem(STORAGE_KEYS.SENT_VACCINE_ALERTS);
   const sent: Set<string> = new Set(sentRaw ? JSON.parse(sentRaw) : []);
 
   const due    = vaccineRows.filter(r => r.status === 'due');
@@ -262,7 +275,7 @@ export async function notifyVaccineAlerts(
     for (const r of newMissed) sent.add(`${child.id}:missed:${r.schedule.id}`);
   }
 
-  await AsyncStorage.setItem(STORAGE_KEYS.SENT_VACCINE_ALERTS, JSON.stringify([...sent]));
+  await store.setItem(STORAGE_KEYS.SENT_VACCINE_ALERTS, JSON.stringify([...sent]));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,7 +353,7 @@ async function scheduleDailyTip(): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function clearNotificationCache(): Promise<void> {
-  await AsyncStorage.multiRemove([
+  await store.multiRemove([
     STORAGE_KEYS.SENT_GROWTH_ALERTS,
     STORAGE_KEYS.SENT_VACCINE_ALERTS,
   ]);
