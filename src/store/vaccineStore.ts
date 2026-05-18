@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+﻿import { supabase } from '@/lib/supabase';
 import { create } from 'zustand';
 
 export interface VaccineSchedule {
@@ -61,7 +61,10 @@ const KEPI_SEED: Omit<VaccineSchedule, 'id'>[] = [
 ];
 
 function toDateStr(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function getDueDate(schedule: VaccineSchedule, dob: string): Date | null {
@@ -130,10 +133,11 @@ interface VaccineState {
 
   seedScheduleIfEmpty: () => Promise<void>;
   fetchSchedules:      () => Promise<void>;
-  fetchImmunizations:  (childId: string) => Promise<void>;
-  computeRows:         (childDob: string) => void;
-  markAsGiven:         (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date) => Promise<void>;
-  markAsMissed:        (scheduleId: string, childId: string) => Promise<void>;
+  fetchImmunizations:  (childId: string) => Promise<Immunization[]>;
+  computeRows:         (childDob: string, freshImmunizations?: Immunization[]) => void;
+  markAsGiven:         (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date, childDob?: string) => Promise<void>;
+  markAsMissed:        (scheduleId: string, childId: string, childDob?: string) => Promise<void>;
+  updateImmunization:  (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
 }
 
 export const useVaccineStore = create<VaccineState>((set, get) => ({
@@ -144,9 +148,11 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
   seeded:        false,
 
   seedScheduleIfEmpty: async () => {
-    const { data: existing } = await supabase.from('vaccine_schedules').select('id').limit(1);
+    const { data: existing, error: checkErr } = await supabase.from('vaccine_schedules').select('id').limit(1);
+    console.log('[vaccineStore] seedCheck:', { existing: existing?.length, error: checkErr?.message, code: checkErr?.code });
     if (existing && existing.length > 0) { set({ seeded: true }); return; }
     const { error } = await supabase.from('vaccine_schedules').insert(KEPI_SEED);
+    console.log('[vaccineStore] seed insert:', { error: error?.message, code: error?.code });
     if (!error) set({ seeded: true });
     else console.error('[vaccineStore] seed:', error.message);
   },
@@ -154,6 +160,7 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
   fetchSchedules: async () => {
     set({ loading: true });
     const { data, error } = await supabase.from('vaccine_schedules').select('*').order('display_order', { ascending: true });
+    console.log('[vaccineStore] fetchSchedules result:', { count: data?.length, error: error?.message, code: error?.code });
     if (error) console.error('[vaccineStore] fetchSchedules:', error.message);
     if (data)  set({ schedules: data });
     set({ loading: false });
@@ -162,11 +169,14 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
   fetchImmunizations: async (childId: string) => {
     const { data, error } = await supabase.from('immunizations').select('*').eq('child_id', childId);
     if (error) console.error('[vaccineStore] fetchImmunizations:', error.message);
-    if (data)  set({ immunizations: data });
+    const imms: Immunization[] = data ?? [];
+    set({ immunizations: imms });
+    return imms;
   },
 
-  computeRows: (childDob: string) => {
-    const { schedules, immunizations } = get();
+  computeRows: (childDob: string, freshImmunizations?: Immunization[]) => {
+    const { schedules } = get();
+    const immunizations = freshImmunizations ?? get().immunizations;
     const rows: VaccineRow[] = schedules.map(schedule => {
       const dueDate      = getDueDate(schedule, childDob);
       const immunization = findImmunization(immunizations, schedule, dueDate);
@@ -177,7 +187,7 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     set({ vaccineRows: rows });
   },
 
-  markAsGiven: async (scheduleId, childId, facilityName, givenDate) => {
+  markAsGiven: async (scheduleId, childId, facilityName, givenDate, childDob) => {
     const userId = await getAuthUserId();
     if (!userId) throw new Error('Not authenticated. Please log in and try again.');
     const schedule = get().schedules.find(s => s.id === scheduleId);
@@ -197,10 +207,24 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
       const { error } = await supabase.from('immunizations').insert({ child_id: childId, vaccine_name: schedule.vaccine_name, scheduled_date: scheduledDateStr, given_date: givenDateStr, facility: facilityName ?? null, status: 'given' });
       assertNoError(error, 'markAsGiven/insert');
     }
-    await get().fetchImmunizations(childId);
+    const fresh2 = await get().fetchImmunizations(childId);
+    if (childDob) get().computeRows(childDob, fresh2);
   },
 
-  markAsMissed: async (scheduleId, childId) => {
+  updateImmunization: async (immunizationId, childId, facilityName, givenDate, childDob) => {
+    const givenDateStr = toDateStr(givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date());
+    const { data, error } = await supabase
+      .from('immunizations')
+      .update({ given_date: givenDateStr, facility: facilityName || null, status: 'given' })
+      .eq('id', immunizationId)
+      .select();
+    assertNoError(error, 'updateImmunization');
+    if (!data || data.length === 0) throw new Error('Save failed â€” Supabase RLS may be blocking updates on immunizations.');
+    const fresh = await get().fetchImmunizations(childId);
+    get().computeRows(childDob, fresh);
+  },
+
+  markAsMissed: async (scheduleId, childId, childDob) => {
     const userId = await getAuthUserId();
     if (!userId) throw new Error('Not authenticated. Please log in and try again.');
     const schedule = get().schedules.find(s => s.id === scheduleId);
@@ -216,6 +240,7 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
       const { error } = await supabase.from('immunizations').insert({ child_id: childId, vaccine_name: schedule.vaccine_name, scheduled_date: toDateStr(dueDate), given_date: null, facility: null, status: 'missed' });
       assertNoError(error, 'markAsMissed/insert');
     }
-    await get().fetchImmunizations(childId);
+    const fresh2 = await get().fetchImmunizations(childId);
+    if (childDob) get().computeRows(childDob, fresh2);
   },
 }));

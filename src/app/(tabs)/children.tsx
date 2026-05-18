@@ -5,7 +5,7 @@ import { useChildStore } from '@/store/childStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import {
+import { Platform,
   ActivityIndicator, FlatList, StyleSheet,
   Text, TouchableOpacity, View
 } from 'react-native';

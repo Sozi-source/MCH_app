@@ -1,12 +1,14 @@
-import { useT } from '@/hooks/useT';
+﻿import { useT } from '@/hooks/useT';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { calculateZScores } from '@/lib/zscore';
+import { getZScoreAlerts, getZScoreDisplay, ActiveAlert } from '@/lib/nutritionData';
 import { GrowthRecord, useChildStore } from '@/store/childStore';
 import { Ionicons } from '@expo/vector-icons';
+import GrowthCharts from '@/components/GrowthCharts';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, Platform, ScrollView,
+  ActivityIndicator, Alert, Platform, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
@@ -20,6 +22,7 @@ function getZLabel(z: number | null): { label: string; color: string; bg: string
   if (z === null) return { label: 'N/A',          color: COLORS.textMuted, bg: COLORS.surface };
   if (z < -3)     return { label: 'Severely low', color: '#A32D2D',        bg: '#FCEBEB' };
   if (z < -2)     return { label: 'Low',          color: '#854F0B',        bg: '#FAEEDA' };
+  if (z > 3)      return { label: 'Obese',        color: '#7B3FA0',        bg: '#F3E8FC' };
   if (z > 2)      return { label: 'High',         color: '#185FA5',        bg: '#E6F1FB' };
   return           { label: 'Normal',             color: '#0F6E56',        bg: '#E1F5EE' };
 }
@@ -29,6 +32,8 @@ function formatDate(d: Date) {
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Inline Date Picker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function InlineDatePicker({ value, onChange }: {
   value: Date;
@@ -98,10 +103,88 @@ function InlineDatePicker({ value, onChange }: {
   );
 }
 
-function RecordCard({ rec }: { rec: GrowthRecord }) {
-  const t = useT();
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Z-Score Alert Banner Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+
+function ZScoreAlertBanner({ alerts }: { alerts: ActiveAlert[] }) {
+  if (alerts.length === 0) return null;
   return (
-    <View style={styles.recCard}>
+    <View style={al.container}>
+      <View style={al.headerRow}>
+        <Ionicons
+          name={alerts[0].urgency === 'urgent' ? 'alert-circle' : 'warning'}
+          size={18}
+          color={alerts[0].urgency === 'urgent' ? '#A32D2D' : '#854F0B'}
+        />
+        <Text style={[
+          al.headerText,
+          { color: alerts[0].urgency === 'urgent' ? '#A32D2D' : '#854F0B' }
+        ]}>
+          {alerts[0].urgency === 'urgent' ? 'Action Required' : 'Monitoring Needed'}
+        </Text>
+        <View style={[
+          al.urgencyBadge,
+          { backgroundColor: alerts[0].urgency === 'urgent' ? '#A32D2D' : '#854F0B' }
+        ]}>
+          <Text style={al.urgencyBadgeText}>
+            {alerts[0].urgency === 'urgent' ? 'URGENT' : 'MONITOR'}
+          </Text>
+        </View>
+      </View>
+
+      {alerts.map((alert, i) => (
+        <View
+          key={i}
+          style={[
+            al.alertRow,
+            { backgroundColor: alert.urgency === 'urgent' ? '#FCEBEB' : '#FAEEDA' },
+            i < alerts.length - 1 && { marginBottom: 8 },
+          ]}
+        >
+          <View style={al.alertLeft}>
+            <View style={[
+              al.indicatorBadge,
+              { backgroundColor: alert.urgency === 'urgent' ? '#A32D2D' : '#854F0B' }
+            ]}>
+              <Text style={al.indicatorText}>{alert.indicator}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[
+                al.classification,
+                { color: alert.urgency === 'urgent' ? '#A32D2D' : '#854F0B' }
+              ]}>
+                {alert.classification}
+              </Text>
+              <Text style={al.action}>{alert.action}</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+
+      <View style={al.sourceRow}>
+        <Ionicons name="shield-checkmark" size={11} color='#2A9D6E' />
+        <Text style={al.sourceText}>
+          Kenya IMAM Guidelines 2019 Ã‚Â· WHO Child Growth Standards
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Growth Record Card Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+
+function RecordCard({ rec, isLatest }: { rec: GrowthRecord; isLatest: boolean }) {
+  const t = useT();
+  const alerts = getZScoreAlerts(rec.waz, rec.haz, rec.whz);
+
+  return (
+    <View style={[styles.recCard, isLatest && styles.recCardLatest]}>
+      {isLatest && (
+        <View style={styles.latestBadge}>
+          <Ionicons name="star" size={10} color={COLORS.onPrimary} />
+          <Text style={styles.latestBadgeText}>Latest</Text>
+        </View>
+      )}
+
       <View style={styles.recHeader}>
         <View style={styles.recAgeBadge}>
           <Text style={styles.recAgeBadgeText}>{rec.age_months} mo</Text>
@@ -112,6 +195,7 @@ function RecordCard({ rec }: { rec: GrowthRecord }) {
           })}
         </Text>
       </View>
+
       <View style={styles.recStats}>
         <View style={styles.recStat}>
           <Text style={styles.recStatVal}>{rec.weight_kg} kg</Text>
@@ -124,9 +208,10 @@ function RecordCard({ rec }: { rec: GrowthRecord }) {
           </View>
         ) : null}
       </View>
+
       <View style={styles.zRow}>
         {([['WAZ', rec.waz], ['HAZ', rec.haz], ['WHZ', rec.whz]] as [string, number | null][]).map(([label, val]) => {
-          const info = getZLabel(val);
+          const info = getZScoreDisplay(val);
           return (
             <View key={label} style={[styles.zChip, { backgroundColor: info.bg }]}>
               <Text style={styles.zChipLabel}>{label}</Text>
@@ -138,15 +223,46 @@ function RecordCard({ rec }: { rec: GrowthRecord }) {
           );
         })}
       </View>
+
+      {/* Alert banner only on cards with alerts */}
+      {alerts.length > 0 && (
+        <View style={styles.recAlertBox}>
+          <ZScoreAlertBanner alerts={alerts} />
+        </View>
+      )}
     </View>
   );
 }
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Latest Z-Score Summary Banner (top of screen) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+
+function LatestAlertSummary({ records }: { records: GrowthRecord[] }) {
+  if (records.length === 0) return null;
+  const latest = records[0];
+  const alerts = getZScoreAlerts(latest.waz, latest.haz, latest.whz);
+  if (alerts.length === 0) {
+    return (
+      <View style={styles.allGoodBanner}>
+        <Ionicons name="checkmark-circle" size={18} color='#0F6E56' />
+        <Text style={styles.allGoodText}>
+          Latest measurements are within normal WHO range
+        </Text>
+        <View style={styles.allGoodSource}>
+          <Text style={styles.allGoodSourceText}>WHO Child Growth Standards</Text>
+        </View>
+      </View>
+    );
+  }
+  return <ZScoreAlertBanner alerts={alerts} />;
+}
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Main Screen Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 export default function GrowthScreen() {
   const t      = useT();
   const router = useRouter();
   const { children, selectedChildId, growthRecords, fetchGrowthRecords, addGrowthRecord } = useChildStore();
-  const activeChild = children.find(c => c.id === selectedChildId);
+  const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
 
   const [weight, setWeight]           = useState('');
   const [height, setHeight]           = useState('');
@@ -203,9 +319,19 @@ export default function GrowthScreen() {
       setMeasureDate(new Date());
       setShowForm(false);
       setShowPicker(false);
-      Platform.OS === 'web'
-        ? window.alert(t('growth_saved'))
-        : Alert.alert(t('saved'), t('growth_saved'));
+
+      // Check alerts on new record and notify immediately
+      const newAlerts = getZScoreAlerts(zscores.waz, zscores.haz, zscores.whz);
+      if (newAlerts.length > 0 && newAlerts[0].urgency === 'urgent') {
+        const msg = newAlerts.map(a => `${a.indicator}: ${a.classification}\n${a.action}`).join('\n\n');
+        Platform.OS === 'web'
+          ? window.alert('Ã¢Å¡Â Ã¯Â¸Â Action Required\n\n' + msg)
+          : Alert.alert('Ã¢Å¡Â Ã¯Â¸Â Action Required', msg, [{ text: 'Understood', style: 'default' }]);
+      } else {
+        Platform.OS === 'web'
+          ? window.alert(t('growth_saved'))
+          : Alert.alert(t('saved'), t('growth_saved'));
+      }
     } catch {
       Platform.OS === 'web'
         ? window.alert(t('failed_save'))
@@ -246,6 +372,39 @@ export default function GrowthScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+
+        {/* Child Selector */}
+        {children.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, flexDirection: 'row' }}>
+            {children.map(c => (
+              <TouchableOpacity
+                key={c.id}
+                onPress={() => useChildStore.getState().selectChild(c.id)}
+                style={{
+                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                  backgroundColor: c.id === activeChild?.id ? COLORS.primary : COLORS.white,
+                  borderWidth: 1.5,
+                  borderColor: c.id === activeChild?.id ? COLORS.primary : COLORS.border,
+                  flexDirection: 'row', alignItems: 'center', gap: 6,
+                }}
+              >
+                <Ionicons
+                  name={c.sex === 'female' ? 'female' : 'male'}
+                  size={13}
+                  color={c.id === activeChild?.id ? COLORS.onPrimary : COLORS.textMuted}
+                />
+                <Text style={{
+                  fontSize: 13, fontWeight: '700',
+                  color: c.id === activeChild?.id ? COLORS.onPrimary : COLORS.textSecondary,
+                }}>
+                  {c.full_name.split(' ')[0]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Child banner */}
         <View style={styles.childBanner}>
           <View style={[styles.childIcon, activeChild.sex === 'female' ? styles.childIconFemale : styles.childIconMale]}>
             <Ionicons
@@ -257,13 +416,18 @@ export default function GrowthScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.childName}>{activeChild.full_name}</Text>
             <Text style={styles.childAge}>
-              Current age: <Text style={styles.childAgeBold}>
+              Current age:{' '}
+              <Text style={styles.childAgeBold}>
                 {getAgeMonthsFromDates(activeChild.date_of_birth, new Date())} months
               </Text>
             </Text>
           </View>
         </View>
 
+        {/* Latest z-score alert summary */}
+        <LatestAlertSummary records={growthRecords} />
+
+        {/* Add measurement form */}
         {showForm && (
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
@@ -279,17 +443,14 @@ export default function GrowthScreen() {
             </TouchableOpacity>
 
             {showPicker && (
-              <InlineDatePicker
-                value={measureDate}
-                onChange={(d) => setMeasureDate(d)}
-              />
+              <InlineDatePicker value={measureDate} onChange={(d) => setMeasureDate(d)} />
             )}
 
             <Text style={styles.label}>{t('age_months')}</Text>
             <View style={styles.readonlyInput}>
               <Ionicons name="lock-closed-outline" size={14} color={COLORS.textMuted} />
               <Text style={styles.readonlyText}>
-                {ageMonths >= 0 ? `${ageMonths} months (auto-calculated)` : 'Invalid - before birth date'}
+                {ageMonths >= 0 ? `${ageMonths} months (auto-calculated)` : 'Invalid Ã¢â‚¬â€ before birth date'}
               </Text>
             </View>
 
@@ -329,15 +490,39 @@ export default function GrowthScreen() {
           </View>
         )}
 
+        {/* WHO Growth Charts */}
+        <View style={styles.cardTitleRow}>
+          <Ionicons name="analytics-outline" size={18} color={COLORS.primary} />
+          <Text style={styles.sectionTitle}>Growth Charts</Text>
+          <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: '#E1F5EE', borderWidth: 1, borderColor: '#2A9D6E' }}>
+            <Text style={{ fontSize: 10, color: '#2A9D6E', fontWeight: '700' }}>WHO Reference</Text>
+          </View>
+        </View>
+        <GrowthCharts
+          records={growthRecords}
+          sex={activeChild.sex}
+          childName={activeChild.full_name}
+        />
+
+        {/* History */}
         <View style={styles.cardTitleRow}>
           <Ionicons name="time-outline" size={18} color={COLORS.primary} />
           <Text style={styles.sectionTitle}>{t('history')}</Text>
+          {growthRecords.length > 0 && (
+            <Text style={styles.recordCount}>{growthRecords.length} record{growthRecords.length !== 1 ? 's' : ''}</Text>
+          )}
         </View>
 
         {growthRecords.length === 0 ? (
-          <Text style={styles.emptyText}>{t('no_records')}</Text>
+          <View style={styles.emptyRecords}>
+            <Ionicons name="bar-chart-outline" size={36} color={COLORS.primaryMid} />
+            <Text style={styles.emptyText}>{t('no_records')}</Text>
+            <Text style={styles.emptyRecordHint}>Tap + to add your child's first measurement</Text>
+          </View>
         ) : (
-          growthRecords.map(rec => <RecordCard key={rec.id} rec={rec} />)
+          growthRecords.map((rec, i) => (
+            <RecordCard key={rec.id} rec={rec} isLatest={i === 0} />
+          ))
         )}
 
         <View style={{ height: 40 }} />
@@ -345,6 +530,8 @@ export default function GrowthScreen() {
     </View>
   );
 }
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Styles Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const ip = StyleSheet.create({
   wrapper:        { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: 12, marginTop: 8, borderWidth: 1, borderColor: COLORS.border },
@@ -355,6 +542,22 @@ const ip = StyleSheet.create({
   chipActive:     { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   chipText:       { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
   chipTextActive: { color: COLORS.onPrimary, fontWeight: '700' },
+});
+
+const al = StyleSheet.create({
+  container:        { borderRadius: RADIUS.lg, borderWidth: 1.5, padding: 14, marginBottom: 12, backgroundColor: COLORS.white, borderColor: '#E8C4C4' },
+  headerRow:        { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  headerText:       { flex: 1, fontSize: 14, fontWeight: '800' },
+  urgencyBadge:     { paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.full },
+  urgencyBadgeText: { color: COLORS.white, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  alertRow:         { borderRadius: RADIUS.md, padding: 12, marginBottom: 4 },
+  alertLeft:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  indicatorBadge:   { paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.sm, marginTop: 1 },
+  indicatorText:    { color: COLORS.white, fontSize: 11, fontWeight: '800' },
+  classification:   { fontSize: 13, fontWeight: '700', marginBottom: 3 },
+  action:           { fontSize: 12, color: COLORS.textPrimary, lineHeight: 18 },
+  sourceRow:        { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 },
+  sourceText:       { fontSize: 10, color: '#2A9D6E', fontStyle: 'italic', fontWeight: '600' },
 });
 
 const styles = StyleSheet.create({
@@ -375,10 +578,15 @@ const styles = StyleSheet.create({
   childName:        { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
   childAge:         { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   childAgeBold:     { fontWeight: '700', color: COLORS.primary },
+  allGoodBanner:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#E1F5EE', borderRadius: RADIUS.lg, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#A8DEC8', flexWrap: 'wrap' },
+  allGoodText:      { flex: 1, fontSize: 13, color: '#0F6E56', fontWeight: '600' },
+  allGoodSource:    { width: '100%', marginTop: 4 },
+  allGoodSourceText:{ fontSize: 10, color: '#2A9D6E', fontStyle: 'italic' },
   card:             { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border },
   cardTitleRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   cardTitle:        { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
-  sectionTitle:     { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
+  sectionTitle:     { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, flex: 1 },
+  recordCount:      { fontSize: 12, color: COLORS.textMuted, fontWeight: '500' },
   label:            { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 6, marginTop: 12 },
   input:            { backgroundColor: COLORS.surface, color: COLORS.textPrimary, borderRadius: RADIUS.md, padding: 12, fontSize: 14, borderWidth: 1, borderColor: COLORS.border },
   readonlyInput:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: 12, borderWidth: 1, borderColor: COLORS.border, opacity: 0.7 },
@@ -388,8 +596,13 @@ const styles = StyleSheet.create({
   btn:              { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, padding: 14, alignItems: 'center', marginTop: 16 },
   btnInner:         { flexDirection: 'row', alignItems: 'center', gap: 8 },
   btnText:          { color: COLORS.onPrimary, fontWeight: '700', fontSize: 15 },
-  emptyText:        { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', marginTop: 8, marginBottom: 24 },
+  emptyRecords:     { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  emptyText:        { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+  emptyRecordHint:  { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic' },
   recCard:          { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border },
+  recCardLatest:    { borderColor: COLORS.primary, borderWidth: 2 },
+  latestBadge:      { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: COLORS.primary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full, marginBottom: 8 },
+  latestBadgeText:  { color: COLORS.onPrimary, fontSize: 10, fontWeight: '700' },
   recHeader:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   recAgeBadge:      { backgroundColor: COLORS.primaryLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
   recAgeBadgeText:  { fontSize: 12, fontWeight: '700', color: COLORS.primary },
@@ -398,9 +611,10 @@ const styles = StyleSheet.create({
   recStat:          { alignItems: 'center' },
   recStatVal:       { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
   recStatLabel:     { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
-  zRow:             { flexDirection: 'row', gap: 8 },
+  zRow:             { flexDirection: 'row', gap: 8, marginBottom: 8 },
   zChip:            { flex: 1, borderRadius: RADIUS.md, padding: 8, alignItems: 'center' },
   zChipLabel:       { fontSize: 10, fontWeight: '700', color: COLORS.textMuted, marginBottom: 2 },
   zChipVal:         { fontSize: 15, fontWeight: '700' },
   zChipStatus:      { fontSize: 9, fontWeight: '600', marginTop: 2 },
+  recAlertBox:      { marginTop: 4 },
 });

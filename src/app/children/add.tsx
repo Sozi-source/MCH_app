@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { useChildStore } from '@/store/childStore';
+import { useAuthStore } from '@/store/authStore';
 import { useRouter } from 'expo-router';
 import { Sex } from '@/types';
 
@@ -16,6 +17,7 @@ export default function AddChildScreen() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const { addChild } = useChildStore();
+  const { user } = useAuthStore();
   const router = useRouter();
 
   const handleAdd = async () => {
@@ -23,6 +25,7 @@ export default function AddChildScreen() {
     if (!fullName || !dob) { setError('Name and date of birth are required.'); return; }
     const dobDate = new Date(dob);
     if (isNaN(dobDate.getTime())) { setError('Please enter a valid date (YYYY-MM-DD).'); return; }
+    if (!user) { setError('You must be logged in to add a child.'); return; }
     setLoading(true);
     try {
       await addChild({
@@ -32,8 +35,7 @@ export default function AddChildScreen() {
         birth_weight_kg:  birthWeight ? parseFloat(birthWeight) : undefined,
         birth_height_cm:  birthHeight ? parseFloat(birthHeight) : undefined,
         health_facility:  facility.trim() || undefined,
-        parent_id:        '',
-        created_at:       new Date().toISOString(),
+        parent_id:        user.id,
       });
       router.back();
     } catch (err: any) {

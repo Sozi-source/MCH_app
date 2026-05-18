@@ -52,11 +52,25 @@ export const useChildStore = create<ChildState>((set) => ({
   },
 
   addChild: async (child) => {
-    const { data } = await supabase
+    // Resolve the DB parent row id from auth_user_id
+    const { data: parentRow, error: parentErr } = await supabase
+      .from('parents')
+      .select('id')
+      .eq('auth_user_id', child.parent_id)
+      .single();
+    if (parentErr || !parentRow) {
+      console.error('[childStore] addChild - parent lookup failed:', parentErr?.message);
+      throw new Error('Parent profile not found. Please log out and log in again.');
+    }
+    const { data, error } = await supabase
       .from('children')
-      .insert(child)
+      .insert({ ...child, parent_id: parentRow.id })
       .select()
       .single();
+    if (error) {
+      console.error('[childStore] addChild - insert failed:', error.message);
+      throw new Error(error.message);
+    }
     if (data) set((state) => ({ children: [data as Child, ...state.children] }));
   },
 
