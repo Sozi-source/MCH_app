@@ -1,6 +1,7 @@
 import { useT } from '@/hooks/useT';
 import { Language } from '@/lib/i18n';
 import { COLORS, RADIUS } from '@/lib/theme';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '
 export default function SettingsScreen() {
   const t = useT();
   const { user } = useAuthStore();
+  const router = useRouter();
   const { language, setLanguage } = useSettingsStore();
 
   const handleLanguage = (lang: Language) => setLanguage(lang, user?.id);
@@ -56,6 +58,20 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <Text style={styles.sectionLabel}>DATA</Text>
+      <View style={styles.card}>
+        <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/reports')}>
+          <View style={styles.cardIconCircle}>
+            <Ionicons name="bar-chart-outline" size={18} color={COLORS.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>Health Reports</Text>
+            <Text style={styles.cardSub}>Growth, nutrition and vaccine summary</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+        </TouchableOpacity>
+      </View>
+
       <Text style={styles.sectionLabel}>ABOUT</Text>
       <View style={styles.card}>
         <View style={styles.infoRow}>
@@ -64,7 +80,7 @@ export default function SettingsScreen() {
           </View>
           <View>
             <Text style={styles.cardTitle}>Mother and Child</Text>
-            <Text style={styles.cardSub}>Version 1.0.0 · Powered by Zuri Health</Text>
+            <Text style={styles.cardSub}>Version 1.0.0 Ãƒâ€šÃ‚Â· Powered by Zuri Health</Text>
           </View>
         </View>
       </View>

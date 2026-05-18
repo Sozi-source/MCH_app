@@ -1,3 +1,4 @@
+﻿import '@/app/global.css';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useChildStore } from '@/store/childStore';
