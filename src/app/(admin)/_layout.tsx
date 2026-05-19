@@ -9,6 +9,7 @@ const tabs: { name: string; title: string; icon: IoniconsName; iconActive: Ionic
   { name: 'dashboard', title: 'Dashboard', icon: 'grid-outline',   iconActive: 'grid' },
   { name: 'parents',   title: 'Parents',   icon: 'people-outline', iconActive: 'people' },
   { name: 'children',  title: 'Children',  icon: 'heart-outline',  iconActive: 'heart' },
+  { name: 'analytics', title: 'Analytics', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
 ];
 
 export default function AdminLayout() {
