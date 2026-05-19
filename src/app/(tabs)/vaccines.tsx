@@ -19,9 +19,9 @@ import {
   View,
 } from 'react-native';
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ─────────────────────────────────────────────
    Types & constants
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+───────────────────────────────────────────── */
 
 type StatusCfg = {
   label: string;
@@ -30,6 +30,7 @@ type StatusCfg = {
   border: string;
   icon: keyof typeof Ionicons.glyphMap;
   accent: string;
+  emoji: string;
 };
 
 const STATUS_CONFIG: Record<VaccineStatus, StatusCfg> = {
@@ -39,7 +40,8 @@ const STATUS_CONFIG: Record<VaccineStatus, StatusCfg> = {
     bg: '#E8F8F1',
     border: '#A3E4C8',
     icon: 'checkmark-circle',
-    accent: '#16A36A',
+    accent: '#1D9E75',
+    emoji: '✅',
   },
   missed: {
     label: 'Missed',
@@ -47,7 +49,8 @@ const STATUS_CONFIG: Record<VaccineStatus, StatusCfg> = {
     bg: '#FDF0EF',
     border: '#F5C0BC',
     icon: 'close-circle',
-    accent: '#E74C3C',
+    accent: '#E24B4A',
+    emoji: '⚠️',
   },
   due: {
     label: 'Due Now',
@@ -55,15 +58,17 @@ const STATUS_CONFIG: Record<VaccineStatus, StatusCfg> = {
     bg: '#FEF6E7',
     border: '#FAD7A0',
     icon: 'alert-circle',
-    accent: '#E67E22',
+    accent: '#BA7517',
+    emoji: '🔔',
   },
   upcoming: {
     label: 'Upcoming',
-    color: '#1A5C9A',
-    bg: '#EBF4FD',
-    border: '#AED6F1',
+    color: '#3D36A8',
+    bg: '#EEEDF9',
+    border: '#C5C2ED',
     icon: 'time-outline',
-    accent: '#2E86C1',
+    accent: '#534AB7',
+    emoji: '📅',
   },
 };
 
@@ -77,12 +82,12 @@ const FILTER_OPTIONS: { key: VaccineStatus | 'all'; label: string }[] = [
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ─────────────────────────────────────────────
    Helpers
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+───────────────────────────────────────────── */
 
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return 'â€”';
+  if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-KE', {
     day: 'numeric',
     month: 'short',
@@ -99,9 +104,9 @@ function getDueLabel(row: VaccineRow): string | null {
   return `${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} overdue`;
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ─────────────────────────────────────────────
    Inline date picker
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+───────────────────────────────────────────── */
 
 function InlineDatePicker({ value, onChange }: { value: Date; onChange: (d: Date) => void }) {
   const currentYear = new Date().getFullYear();
@@ -154,9 +159,9 @@ function InlineDatePicker({ value, onChange }: { value: Date; onChange: (d: Date
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Mark / Edit modal
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────────────────────────────────────
+   Mark / Edit modal — premium sheet
+───────────────────────────────────────────── */
 
 function MarkGivenModal({
   visible, row, onConfirm, onCancel, editMode,
@@ -175,11 +180,7 @@ function MarkGivenModal({
     if (visible) {
       if (editMode && row?.immunization) {
         setFacility(row.immunization.facility ?? '');
-        setDate(
-          row.immunization.given_date
-            ? new Date(row.immunization.given_date)
-            : new Date(),
-        );
+        setDate(row.immunization.given_date ? new Date(row.immunization.given_date) : new Date());
       } else {
         setFacility('');
         setDate(new Date());
@@ -196,37 +197,53 @@ function MarkGivenModal({
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={mds.card}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 48 }}
         showsVerticalScrollIndicator={false}
       >
         <View style={mds.handle} />
 
-        {/* Header stripe */}
-        <View style={[mds.headerStripe, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+        {/* Vaccine identity hero */}
+        <View style={[mds.heroStripe, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+          {/* Decorative circle */}
+          <View style={[mds.heroCircle, { borderColor: cfg.border }]} />
           <View style={[mds.iconCircle, { backgroundColor: cfg.accent }]}>
             <Ionicons name={cfg.icon} size={22} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
+            <View style={mds.heroTopRow}>
+              <Text style={mds.heroEmoji}>{cfg.emoji}</Text>
+              <View style={[mds.heroBadge, { backgroundColor: cfg.accent }]}>
+                <Text style={mds.heroBadgeText}>{cfg.label}</Text>
+              </View>
+            </View>
             <Text style={mds.title}>{editMode ? 'Edit Immunization Record' : row.schedule.vaccine_name}</Text>
             <Text style={mds.subtitle}>
-              {'Dose ' + row.schedule.dose_number + ' Â· ' + row.schedule.diseases_covered}
+              {'Dose ' + row.schedule.dose_number + ' · ' + row.schedule.diseases_covered}
             </Text>
           </View>
         </View>
 
+        {/* Info tip */}
+        <View style={mds.infoTip}>
+          <Ionicons name="information-circle-outline" size={15} color={COLORS.primary} />
+          <Text style={mds.infoTipText}>
+            {editMode
+              ? 'Update the vaccination details below.'
+              : 'Enter the date and facility where this vaccine was administered.'}
+          </Text>
+        </View>
+
         {/* Date */}
-        <Text style={mds.fieldLabel}>Date Given</Text>
+        <Text style={mds.fieldLabel}>📅 Date Given</Text>
         <TouchableOpacity
           style={[mds.dateRow, showPicker && mds.dateRowActive]}
           onPress={() => setShowPicker(p => !p)}
         >
-          <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+          <View style={mds.dateIconWrap}>
+            <Ionicons name="calendar-outline" size={17} color={COLORS.primary} />
+          </View>
           <Text style={mds.dateText}>
-            {date.toLocaleDateString('en-KE', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
+            {date.toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })}
           </Text>
           <Ionicons
             name={showPicker ? 'chevron-up-outline' : 'chevron-down-outline'}
@@ -237,9 +254,11 @@ function MarkGivenModal({
         {showPicker && <InlineDatePicker value={date} onChange={setDate} />}
 
         {/* Facility */}
-        <Text style={mds.fieldLabel}>Health Facility</Text>
+        <Text style={mds.fieldLabel}>🏥 Health Facility</Text>
         <View style={mds.inputWrapper}>
-          <Ionicons name="business-outline" size={17} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+          <View style={mds.inputIconWrap}>
+            <Ionicons name="business-outline" size={17} color={COLORS.primary} />
+          </View>
           <TextInput
             style={mds.input}
             value={facility}
@@ -277,9 +296,9 @@ function MarkGivenModal({
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Vaccine card â€” world-class design
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────────────────────────────────────
+   Vaccine card — premium
+───────────────────────────────────────────── */
 
 function VaccineCard({
   row, onMarkGiven, onMarkMissed, onEdit,
@@ -295,32 +314,34 @@ function VaccineCard({
   const isGiven = row.status === 'given';
   const isMissed = row.status === 'missed';
 
-  // Subtle press animation
   const scale = useRef(new Animated.Value(1)).current;
-  const onPressIn = () => Animated.spring(scale, { toValue: 0.975, useNativeDriver: true, speed: 50 }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start();
+  const onPressIn = () =>
+    Animated.spring(scale, { toValue: 0.972, useNativeDriver: true, speed: 50 }).start();
+  const onPressOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start();
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <TouchableOpacity
         style={[vc.card, { borderColor: cfg.border }]}
-        onPress={() => isGiven ? onEdit(row) : undefined}
+        onPress={() => (isGiven ? onEdit(row) : undefined)}
         onPressIn={isGiven ? onPressIn : undefined}
         onPressOut={isGiven ? onPressOut : undefined}
         activeOpacity={isGiven ? 0.9 : 1}
       >
-        {/* Colored left accent bar */}
+        {/* Bold left accent bar */}
         <View style={[vc.accentBar, { backgroundColor: cfg.accent }]} />
 
         <View style={vc.body}>
-          {/* Top row: status badge + dose */}
+          {/* Top row */}
           <View style={vc.topRow}>
             <View style={[vc.badge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-              <Ionicons name={cfg.icon} size={12} color={cfg.color} />
+              <Text style={vc.badgeEmoji}>{cfg.emoji}</Text>
+              <Ionicons name={cfg.icon} size={11} color={cfg.color} />
               <Text style={[vc.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
             </View>
-            <View style={vc.doseTag}>
-              <Text style={vc.doseText}>Dose {row.schedule.dose_number}</Text>
+            <View style={[vc.doseTag, { borderColor: cfg.border }]}>
+              <Text style={[vc.doseText, { color: cfg.color }]}>Dose {row.schedule.dose_number}</Text>
             </View>
           </View>
 
@@ -330,10 +351,13 @@ function VaccineCard({
           {/* Diseases */}
           <Text style={vc.diseases} numberOfLines={2}>{row.schedule.diseases_covered}</Text>
 
-          {/* Info row: due date + facility */}
+          {/* Divider */}
+          <View style={vc.divider} />
+
+          {/* Info row */}
           <View style={vc.infoRow}>
             {dueLabel !== null && (
-              <View style={[vc.infoPill, { backgroundColor: cfg.bg }]}>
+              <View style={[vc.infoPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
                 <Ionicons
                   name={isGiven ? 'checkmark-circle-outline' : 'calendar-outline'}
                   size={11}
@@ -350,19 +374,19 @@ function VaccineCard({
             )}
           </View>
 
-          {/* Notes chip */}
+          {/* Notes */}
           {row.schedule.notes !== null && (
             <View style={vc.notesChip}>
-              <Ionicons name="information-circle-outline" size={12} color={COLORS.textMuted} />
+              <Ionicons name="information-circle-outline" size={12} color={COLORS.primary} />
               <Text style={vc.notesText}>{row.schedule.notes}</Text>
             </View>
           )}
 
           {/* Actions */}
           {isGiven ? (
-            <View style={vc.editHint}>
-              <Ionicons name="create-outline" size={12} color={cfg.accent} />
-              <Text style={[vc.editHintText, { color: cfg.accent }]}>Tap to edit record</Text>
+            <View style={[vc.editHint, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+              <Ionicons name="create-outline" size={13} color={cfg.accent} />
+              <Text style={[vc.editHintText, { color: cfg.accent }]}>Tap card to edit record</Text>
             </View>
           ) : (
             <View style={vc.actions}>
@@ -380,7 +404,7 @@ function VaccineCard({
                   onPress={() => onMarkMissed(row)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="close-circle-outline" size={15} color={STATUS_CONFIG.missed.color} />
+                  <Ionicons name="close-circle-outline" size={15} color={STATUS_CONFIG.missed.accent} />
                   <Text style={vc.secondaryBtnText}>Missed</Text>
                 </TouchableOpacity>
               )}
@@ -392,9 +416,9 @@ function VaccineCard({
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Filter bar
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────────────────────────────────────
+   Filter bar — premium chips
+───────────────────────────────────────────── */
 
 function FilterBar({
   active, counts, total, onChange,
@@ -411,22 +435,28 @@ function FilterBar({
           const isActive = active === f.key;
           const count = f.key === 'all' ? total : counts[f.key as VaccineStatus];
           const cfg = f.key !== 'all' ? STATUS_CONFIG[f.key as VaccineStatus] : null;
+          const activeBg = cfg ? cfg.accent : COLORS.primary;
           return (
             <TouchableOpacity
               key={f.key}
               style={[
                 fb.chip,
-                isActive && (cfg ? { backgroundColor: cfg.accent, borderColor: cfg.accent } : fb.chipActiveAll),
+                isActive && { backgroundColor: activeBg, borderColor: activeBg },
               ]}
               onPress={() => onChange(f.key)}
               activeOpacity={0.75}
             >
               {f.key !== 'all' && cfg && (
-                <View style={[fb.dot, { backgroundColor: isActive ? 'rgba(255,255,255,0.7)' : cfg.accent }]} />
+                <Text style={fb.emoji}>{cfg.emoji}</Text>
               )}
-              <Text style={[fb.label, isActive && fb.labelActive]}>
-                {f.label}
-              </Text>
+              {f.key === 'all' && (
+                <Ionicons
+                  name="apps-outline"
+                  size={13}
+                  color={isActive ? '#fff' : COLORS.textSecondary}
+                />
+              )}
+              <Text style={[fb.label, isActive && fb.labelActive]}>{f.label}</Text>
               <View style={[fb.countBadge, isActive && fb.countBadgeActive]}>
                 <Text style={[fb.countText, isActive && fb.countTextActive]}>{count}</Text>
               </View>
@@ -438,28 +468,32 @@ function FilterBar({
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   Progress bar
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────────────────────────────────────
+   Circular progress ring
+───────────────────────────────────────────── */
 
-function ProgressBar({ given, total }: { given: number; total: number }) {
+function CircleProgress({ given, total }: { given: number; total: number }) {
   const pct = total > 0 ? given / total : 0;
   const widthAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(widthAnim, {
       toValue: pct,
-      duration: 800,
+      duration: 900,
       useNativeDriver: false,
     }).start();
   }, [pct]);
 
+  const pctInt = Math.round(pct * 100);
+
   return (
-    <View style={pb.container}>
-      <View style={pb.track}>
+    <View style={cp.wrap}>
+      {/* Track */}
+      <View style={cp.track}>
+        {/* Fill bar */}
         <Animated.View
           style={[
-            pb.fill,
+            cp.fill,
             {
               width: widthAnim.interpolate({
                 inputRange: [0, 1],
@@ -469,16 +503,17 @@ function ProgressBar({ given, total }: { given: number; total: number }) {
           ]}
         />
       </View>
-      <Text style={pb.label}>
-        {given}/{total} completed
-      </Text>
+      <View style={cp.labels}>
+        <Text style={cp.pct}>{pctInt}%</Text>
+        <Text style={cp.sub}>{given}/{total} done</Text>
+      </View>
     </View>
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ─────────────────────────────────────────────
    Main screen
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+───────────────────────────────────────────── */
 
 export default function VaccinesScreen() {
   const router = useRouter();
@@ -507,34 +542,25 @@ export default function VaccinesScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* â”€â”€ Handlers â”€â”€ */
-
+  /* Handlers */
   const handleMarkGiven = async (facility: string, date: Date) => {
     if (!modalRow || !activeChild) return;
     setSaving(true);
     try {
       if (editMode && modalRow.immunization?.id) {
         await updateImmunization(
-          modalRow.immunization.id,
-          activeChild.id,
-          facility,
-          date,
-          activeChild.date_of_birth,
+          modalRow.immunization.id, activeChild.id, facility, date, activeChild.date_of_birth,
         );
-        const fresh = await fetchImmunizations(activeChild.id);
-        computeRows(activeChild.date_of_birth, fresh);
       } else {
         await markAsGiven(modalRow.schedule.id, activeChild.id, facility, date, activeChild.date_of_birth);
-        const fresh = await fetchImmunizations(activeChild.id);
-        computeRows(activeChild.date_of_birth, fresh);
       }
+      const fresh = await fetchImmunizations(activeChild.id);
+      computeRows(activeChild.date_of_birth, fresh);
       setModalRow(null);
       setEditMode(false);
     } catch (err: any) {
       const msg = err?.message ?? 'Failed to record';
-      Platform.OS === 'web'
-        ? window.alert(msg)
-        : Alert.alert('Error', msg);
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
     } finally {
       setSaving(false);
     }
@@ -549,9 +575,7 @@ export default function VaccinesScreen() {
           computeRows(activeChild.date_of_birth, fresh);
         })
         .catch((err: any) => {
-          Platform.OS === 'web'
-            ? window.alert(err?.message)
-            : Alert.alert('Error', err?.message);
+          Platform.OS === 'web' ? window.alert(err?.message) : Alert.alert('Error', err?.message);
         });
     };
     Platform.OS === 'web'
@@ -562,24 +586,21 @@ export default function VaccinesScreen() {
         ]);
   };
 
-  /* â”€â”€ Stats â”€â”€ */
-
+  /* Stats */
   const counts = {
     due: vaccineRows.filter(r => r.status === 'due').length,
     upcoming: vaccineRows.filter(r => r.status === 'upcoming').length,
     given: vaccineRows.filter(r => r.status === 'given').length,
     missed: vaccineRows.filter(r => r.status === 'missed').length,
   };
-
   const filtered = filter === 'all' ? vaccineRows : vaccineRows.filter(r => r.status === filter);
 
-  /* â”€â”€ Empty state â”€â”€ */
-
+  /* No child */
   if (!activeChild) {
     return (
       <View style={s.emptyContainer}>
         <View style={s.emptyIconRing}>
-          <Ionicons name="shield-outline" size={40} color={COLORS.primary} />
+          <Text style={{ fontSize: 36 }}>💉</Text>
         </View>
         <Text style={s.emptyTitle}>No child selected</Text>
         <Text style={s.emptySub}>Go to the Children tab to select or add a child first.</Text>
@@ -591,7 +612,7 @@ export default function VaccinesScreen() {
     );
   }
 
-  /* â”€â”€ Main UI â”€â”€ */
+  const isFemale = activeChild.sex === 'female';
 
   return (
     <View style={s.container}>
@@ -603,73 +624,117 @@ export default function VaccinesScreen() {
         onCancel={() => { setModalRow(null); setEditMode(false); }}
       />
 
-      {/* Header */}
+      {/* ── HERO HEADER ── */}
       <View style={s.header}>
-        <View>
-          <Text style={s.headerLabel}>KEPI Schedule</Text>
-          <Text style={s.headerSub}>Kenya Expanded Programme on Immunization</Text>
+        {/* Decorative circles */}
+        <View style={s.heroDeco1} />
+        <View style={s.heroDeco2} />
+
+        <View style={s.headerTop}>
+          <View>
+            <Text style={s.headerEyebrow}>Kenya KEPI Schedule 💉</Text>
+            <Text style={s.headerTitle}>Immunizations</Text>
+            <Text style={s.headerSub}>Kenya Expanded Programme on Immunization</Text>
+          </View>
+          {saving
+            ? <ActivityIndicator color="rgba(255,255,255,0.8)" size="small" />
+            : (
+              <View style={s.headerIconWrap}>
+                <Ionicons name="shield-checkmark" size={22} color="rgba(255,255,255,0.9)" />
+              </View>
+            )}
         </View>
-        {saving && <ActivityIndicator color="#fff" size="small" />}
+
+        {/* Child strip inside hero */}
+        <View style={s.childStrip}>
+          <View style={[s.avatar, { backgroundColor: isFemale ? '#FDE8F5' : '#E8F0FD' }]}>
+            <Text style={{ fontSize: 18 }}>{isFemale ? '👧' : '👦'}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.childName}>{activeChild.full_name}</Text>
+            <Text style={s.childDob}>Born {formatDate(activeChild.date_of_birth)}</Text>
+          </View>
+          <CircleProgress given={counts.given} total={vaccineRows.length} />
+        </View>
       </View>
 
-      {/* Child banner */}
-      <View style={s.childBanner}>
-        <View style={[s.avatar, { backgroundColor: activeChild.sex === 'female' ? '#FDE8F5' : '#E8F0FD' }]}>
-          <Ionicons
-            name={activeChild.sex === 'female' ? 'female' : 'male'}
-            size={18}
-            color={activeChild.sex === 'female' ? '#C0396E' : '#2E5BB5'}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={s.childName}>{activeChild.full_name}</Text>
-          <Text style={s.childDob}>Born {formatDate(activeChild.date_of_birth)}</Text>
-        </View>
-        <ProgressBar given={counts.given} total={vaccineRows.length} />
-      </View>
-
-      {/* Stats row */}
+      {/* ── STATS ROW ── */}
       <View style={s.statsRow}>
         {(
           [
-            { key: 'due', label: 'Due', count: counts.due },
-            { key: 'upcoming', label: 'Upcoming', count: counts.upcoming },
-            { key: 'given', label: 'Given', count: counts.given },
-            { key: 'missed', label: 'Missed', count: counts.missed },
-          ] as const
-        ).map(({ key, label, count }) => {
+            { key: 'due' as VaccineStatus, label: 'Due', icon: 'alert-circle' as const },
+            { key: 'upcoming' as VaccineStatus, label: 'Upcoming', icon: 'time-outline' as const },
+            { key: 'given' as VaccineStatus, label: 'Given', icon: 'checkmark-circle' as const },
+            { key: 'missed' as VaccineStatus, label: 'Missed', icon: 'close-circle' as const },
+          ]
+        ).map(({ key, label, icon }) => {
           const cfg = STATUS_CONFIG[key];
+          const isActive = filter === key;
           return (
             <TouchableOpacity
               key={key}
-              style={[s.statBox, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
+              style={[
+                s.statCard,
+                { backgroundColor: isActive ? cfg.accent : '#fff', borderColor: isActive ? cfg.accent : cfg.border },
+              ]}
               onPress={() => setFilter(key)}
               activeOpacity={0.8}
             >
-              <Text style={[s.statNum, { color: cfg.accent }]}>{count}</Text>
-              <Text style={[s.statLabel, { color: cfg.color }]}>{label}</Text>
+              <View style={[s.statIconWrap, { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : cfg.bg }]}>
+                <Ionicons name={icon} size={16} color={isActive ? '#fff' : cfg.accent} />
+              </View>
+              <Text style={[s.statNum, { color: isActive ? '#fff' : cfg.accent }]}>
+                {counts[key]}
+              </Text>
+              <Text style={[s.statLabel, { color: isActive ? 'rgba(255,255,255,0.85)' : cfg.color }]}>
+                {label}
+              </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Filter bar */}
+      {/* ── FILTER BAR ── */}
       <FilterBar active={filter} counts={counts} total={vaccineRows.length} onChange={setFilter} />
 
-      {/* List */}
+      {/* ── LIST ── */}
       {loading ? (
         <View style={s.centerBox}>
-          <ActivityIndicator color={COLORS.primary} size="large" />
-          <Text style={s.loadingText}>Loading immunization scheduleâ€¦</Text>
+          <View style={s.loadingIconWrap}>
+            <ActivityIndicator color={COLORS.primary} size="large" />
+          </View>
+          <Text style={s.loadingText}>Loading immunization schedule…</Text>
         </View>
       ) : filtered.length === 0 ? (
         <View style={s.centerBox}>
-          <Ionicons name="checkmark-done-circle-outline" size={52} color={COLORS.primaryMid} />
+          <View style={s.emptyListIconWrap}>
+            <Text style={{ fontSize: 40 }}>✅</Text>
+          </View>
           <Text style={s.emptyListTitle}>All clear here</Text>
           <Text style={s.emptyListSub}>No vaccines in this category</Text>
+          <TouchableOpacity style={s.resetBtn} onPress={() => setFilter('all')}>
+            <Text style={s.resetBtnText}>View all vaccines</Text>
+          </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={s.list}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Section label */}
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>
+              {filter === 'all'
+                ? `All Vaccines`
+                : `${STATUS_CONFIG[filter as VaccineStatus].label} · ${filtered.length}`}
+            </Text>
+            {filter !== 'all' && (
+              <TouchableOpacity onPress={() => setFilter('all')}>
+                <Text style={s.sectionAction}>See all</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {filtered.map(row => (
             <VaccineCard
               key={row.schedule.id}
@@ -679,96 +744,148 @@ export default function VaccinesScreen() {
               onEdit={r => { setEditMode(true); setModalRow(r); }}
             />
           ))}
-          <View style={{ height: 100 }} />
+          <View style={{ height: 140 }} />
         </ScrollView>
       )}
     </View>
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ─────────────────────────────────────────────
    Styles
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+───────────────────────────────────────────── */
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F6FA' },
+  container: { flex: 1, backgroundColor: '#F0F4F8' },
 
-  // Empty (no child)
+  /* Empty — no child */
   emptyContainer: {
-    flex: 1, backgroundColor: '#F4F6FA',
+    flex: 1, backgroundColor: '#F0F4F8',
     alignItems: 'center', justifyContent: 'center', padding: 36,
   },
   emptyIconRing: {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: '#EBF1FD', alignItems: 'center', justifyContent: 'center',
-    marginBottom: 20, borderWidth: 1.5, borderColor: '#C5D8F8',
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: '#E6F4FE', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 20, borderWidth: 2, borderColor: '#90C5F7',
   },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: '#1A202C', marginBottom: 8 },
-  emptySub: { fontSize: 14, color: '#718096', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: '#1A202C', marginBottom: 10 },
+  emptySub: { fontSize: 14, color: '#4A5568', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
   goBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORS.primary, borderRadius: 14,
-    paddingHorizontal: 24, paddingVertical: 14,
+    backgroundColor: '#208AEF', borderRadius: 16,
+    paddingHorizontal: 28, paddingVertical: 15,
+    shadowColor: '#208AEF', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
   },
-  goBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  goBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
-  // Header
+  /* Hero header */
   header: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#208AEF',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingTop: 56,
     paddingHorizontal: 20,
-    paddingTop: 52,
-    paddingBottom: 18,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    paddingBottom: 20,
+    overflow: 'hidden',
   },
-  headerLabel: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
-  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.72)', marginTop: 2 },
+  heroDeco1: {
+    position: 'absolute', width: 220, height: 220, borderRadius: 110,
+    borderWidth: 40, borderColor: 'rgba(255,255,255,0.06)',
+    top: -60, right: -60,
+  },
+  heroDeco2: {
+    position: 'absolute', width: 130, height: 130, borderRadius: 65,
+    borderWidth: 24, borderColor: 'rgba(255,255,255,0.05)',
+    bottom: 20, left: -30,
+  },
+  headerTop: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 18,
+  },
+  headerEyebrow: {
+    fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '700',
+    letterSpacing: 0.4, marginBottom: 4,
+  },
+  headerTitle: {
+    fontSize: 28, fontWeight: '800', color: '#fff',
+    letterSpacing: -0.5, lineHeight: 32,
+  },
+  headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 },
+  headerIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 
-  // Child banner
-  childBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8EDF5',
+  /* Child strip (inside hero) */
+  childStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16, padding: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
   avatar: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#E2E8F0',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
   },
-  childName: { fontSize: 15, fontWeight: '700', color: '#1A202C' },
-  childDob: { fontSize: 12, color: '#718096', marginTop: 1 },
+  childName: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
+  childDob: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
-  // Stats
+  /* Stats */
   statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingTop: 14,
-    paddingBottom: 4,
-    gap: 8,
-    backgroundColor: '#F4F6FA',
+    flexDirection: 'row', paddingHorizontal: 16, paddingTop: 18,
+    paddingBottom: 6, gap: 10,
   },
-  statBox: {
-    flex: 1, borderRadius: 14, paddingVertical: 14,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1,
+  statCard: {
+    flex: 1, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 6,
+    alignItems: 'center', borderWidth: 1.5,
+    shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  statNum: { fontSize: 24, fontWeight: '800', lineHeight: 28 },
-  statLabel: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+  statIconWrap: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+  },
+  statNum: { fontSize: 22, fontWeight: '800', lineHeight: 26 },
+  statLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
 
-  // List
-  list: { paddingHorizontal: 14, paddingTop: 14 },
+  /* Filter bar */
+  /* (styles in fb object below) */
 
-  // Loading / empty
-  centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 40 },
-  loadingText: { fontSize: 14, color: '#718096', marginTop: 8 },
-  emptyListTitle: { fontSize: 17, fontWeight: '700', color: '#2D3748', marginTop: 4 },
-  emptyListSub: { fontSize: 13, color: '#A0AEC0' },
+  /* Section header */
+  sectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1A202C' },
+  sectionAction: { fontSize: 13, fontWeight: '700', color: '#208AEF' },
+
+  /* List */
+  list: { paddingHorizontal: 16, paddingTop: 16 },
+
+  /* Loading / empty */
+  centerBox: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40,
+  },
+  loadingIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: '#E6F4FE', alignItems: 'center', justifyContent: 'center',
+  },
+  loadingText: { fontSize: 14, color: '#718096', marginTop: 4, fontWeight: '500' },
+  emptyListIconWrap: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: '#E8F8F1', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyListTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C' },
+  emptyListSub: { fontSize: 13, color: '#A0AEC0', fontWeight: '500' },
+  resetBtn: {
+    marginTop: 8, backgroundColor: '#208AEF', borderRadius: 12,
+    paddingHorizontal: 24, paddingVertical: 12,
+  },
+  resetBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
 
 /* Vaccine card */
@@ -776,106 +893,112 @@ const vc = StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#1A3A6B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     elevation: 3,
   },
   accentBar: { width: 5 },
-  body: { flex: 1, padding: 14, paddingLeft: 14 },
+  body: { flex: 1, padding: 14 },
 
   topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 8,
   },
   badge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 20, borderWidth: 1,
   },
+  badgeEmoji: { fontSize: 11 },
   badgeText: { fontSize: 11, fontWeight: '700' },
   doseTag: {
     backgroundColor: '#F7F8FC', paddingHorizontal: 10,
-    paddingVertical: 4, borderRadius: 20,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    paddingVertical: 5, borderRadius: 20,
+    borderWidth: 1,
   },
-  doseText: { fontSize: 11, color: '#718096', fontWeight: '600' },
+  doseText: { fontSize: 11, fontWeight: '700' },
 
-  name: { fontSize: 17, fontWeight: '800', color: '#1A202C', marginBottom: 3, letterSpacing: -0.2 },
+  name: { fontSize: 17, fontWeight: '800', color: '#1A202C', marginBottom: 3, letterSpacing: -0.3 },
   diseases: { fontSize: 12, color: '#718096', lineHeight: 18, marginBottom: 10 },
+
+  divider: {
+    height: 1, backgroundColor: '#F0F4F8', marginBottom: 10,
+  },
 
   infoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   infoPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 9, paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: 20, borderWidth: 1,
   },
   infoPillText: { fontSize: 11, fontWeight: '700' },
   facilityPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 9, paddingVertical: 4,
     borderRadius: 20, backgroundColor: '#F7F8FC',
-    maxWidth: 160,
+    borderWidth: 1, borderColor: '#E2E8F0', maxWidth: 160,
   },
   facilityText: { fontSize: 11, color: '#718096', flex: 1 },
 
   notesChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#F7F8FC', borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 5,
-    marginBottom: 8,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: '#E6F4FE', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 6,
+    marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#208AEF',
   },
-  notesText: { fontSize: 11, color: '#A0AEC0', flex: 1 },
+  notesText: { fontSize: 11, color: '#4A5568', flex: 1, lineHeight: 16 },
 
-  actions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   primaryBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6,
-    borderRadius: 12, paddingVertical: 11,
+    borderRadius: 12, paddingVertical: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 4, elevation: 2,
   },
-  primaryBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  primaryBtnText: { fontSize: 13, fontWeight: '800', color: '#fff' },
   secondaryBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
     borderWidth: 1.5, borderColor: STATUS_CONFIG.missed.border,
-    borderRadius: 12, paddingVertical: 11, paddingHorizontal: 16,
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
   },
-  secondaryBtnText: { fontSize: 13, fontWeight: '700', color: STATUS_CONFIG.missed.color },
+  secondaryBtnText: { fontSize: 13, fontWeight: '700', color: STATUS_CONFIG.missed.accent },
 
   editHint: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 6, paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 10, borderWidth: 1,
   },
-  editHintText: { fontSize: 12, fontWeight: '600' },
+  editHintText: { fontSize: 12, fontWeight: '700' },
 });
 
 /* Filter bar */
 const fb = StyleSheet.create({
   wrapper: {
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8EDF5',
-    paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+    paddingVertical: 12,
+    shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
-  row: { paddingHorizontal: 14, gap: 8, flexDirection: 'row', alignItems: 'center' },
+  row: { paddingHorizontal: 16, gap: 8, flexDirection: 'row', alignItems: 'center' },
   chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: '#F7F8FC',
-    borderWidth: 1, borderColor: '#E2E8F0',
+    borderRadius: 9999, backgroundColor: '#fff',
+    borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  chipActiveAll: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  label: { fontSize: 13, fontWeight: '600', color: '#4A5568' },
-  labelActive: { color: '#fff', fontWeight: '700' },
+  emoji: { fontSize: 12 },
+  label: { fontSize: 13, fontWeight: '700', color: '#4A5568' },
+  labelActive: { color: '#fff' },
   countBadge: {
-    backgroundColor: '#E2E8F0', borderRadius: 10,
+    backgroundColor: '#F0F4F8', borderRadius: 10,
     paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
   },
   countBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
@@ -883,18 +1006,20 @@ const fb = StyleSheet.create({
   countTextActive: { color: '#fff' },
 });
 
-/* Progress bar */
-const pb = StyleSheet.create({
-  container: { alignItems: 'flex-end', gap: 3 },
+/* Circle progress */
+const cp = StyleSheet.create({
+  wrap: { alignItems: 'flex-end', gap: 4, minWidth: 80 },
   track: {
-    width: 72, height: 6, borderRadius: 3,
-    backgroundColor: '#E8EDF5', overflow: 'hidden',
+    width: 80, height: 6, borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden',
   },
   fill: {
     height: '100%', borderRadius: 3,
-    backgroundColor: STATUS_CONFIG.given.accent,
+    backgroundColor: '#fff',
   },
-  label: { fontSize: 10, color: '#A0AEC0', fontWeight: '600' },
+  labels: { alignItems: 'flex-end' },
+  pct: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  sub: { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
 });
 
 /* Inline date picker */
@@ -902,7 +1027,7 @@ const ip = StyleSheet.create({
   wrapper: {
     backgroundColor: '#F7F8FC', borderRadius: 14, padding: 14,
     marginTop: 8, marginBottom: 8,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    borderWidth: 1.5, borderColor: '#E2E8F0',
   },
   label: {
     fontSize: 11, fontWeight: '700', color: '#A0AEC0',
@@ -911,21 +1036,20 @@ const ip = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: 6 },
   chip: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: '#fff',
-    borderWidth: 1, borderColor: '#E2E8F0',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  chipActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
   chipText: { fontSize: 13, fontWeight: '600', color: '#4A5568' },
-  chipTextActive: { color: '#fff', fontWeight: '700' },
+  chipTextActive: { color: '#fff', fontWeight: '800' },
 });
 
 /* Modal */
 const mds = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(10,20,50,0.55)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(10,20,50,0.6)', justifyContent: 'flex-end' },
   webOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    zIndex: 999, backgroundColor: 'rgba(10,20,50,0.55)',
+    zIndex: 999, backgroundColor: 'rgba(10,20,50,0.6)',
   },
   card: {
     backgroundColor: '#fff',
@@ -937,50 +1061,81 @@ const mds = StyleSheet.create({
     width: 44, height: 4, borderRadius: 2,
     backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20,
   },
-  headerStripe: {
+
+  /* Vaccine hero strip */
+  heroStripe: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    padding: 14, borderRadius: 16, borderWidth: 1,
-    marginBottom: 20,
+    padding: 16, borderRadius: 20, borderWidth: 1.5,
+    marginBottom: 16, overflow: 'hidden', position: 'relative',
+  },
+  heroCircle: {
+    position: 'absolute', width: 100, height: 100, borderRadius: 50,
+    borderWidth: 20, right: -20, bottom: -30,
   },
   iconCircle: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 48, height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
   },
-  title: { fontSize: 18, fontWeight: '800', color: '#1A202C', letterSpacing: -0.2 },
-  subtitle: { fontSize: 12, color: '#718096', marginTop: 2 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  heroEmoji: { fontSize: 16 },
+  heroBadge: {
+    borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 3,
+  },
+  heroBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
+  title: { fontSize: 17, fontWeight: '800', color: '#1A202C', letterSpacing: -0.2 },
+  subtitle: { fontSize: 12, color: '#718096', marginTop: 2, lineHeight: 17 },
+
+  /* Info tip */
+  infoTip: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#E6F4FE', borderRadius: 12, padding: 12,
+    borderLeftWidth: 3, borderLeftColor: '#208AEF', marginBottom: 4,
+  },
+  infoTipText: { flex: 1, fontSize: 12, color: '#4A5568', lineHeight: 17, fontWeight: '500' },
 
   fieldLabel: {
-    fontSize: 12, fontWeight: '700', color: '#A0AEC0',
-    marginBottom: 8, marginTop: 16,
-    letterSpacing: 0.4, textTransform: 'uppercase',
+    fontSize: 12, fontWeight: '800', color: '#1A202C',
+    marginBottom: 8, marginTop: 18, letterSpacing: 0.2,
   },
   dateRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#F7F8FC', borderRadius: 14,
     padding: 14, borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  dateRowActive: { borderColor: COLORS.primary },
-  dateText: { flex: 1, fontSize: 15, color: '#1A202C', fontWeight: '600' },
+  dateRowActive: { borderColor: '#208AEF', backgroundColor: '#F0F8FF' },
+  dateIconWrap: {
+    width: 32, height: 32, borderRadius: 9, backgroundColor: '#E6F4FE',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dateText: { flex: 1, fontSize: 15, color: '#1A202C', fontWeight: '700' },
 
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F7F8FC', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 2,
+    paddingLeft: 10, paddingRight: 14,
     borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  input: { flex: 1, fontSize: 15, color: '#1A202C', paddingVertical: 12 },
+  inputIconWrap: {
+    width: 32, height: 32, borderRadius: 9, backgroundColor: '#E6F4FE',
+    alignItems: 'center', justifyContent: 'center', marginRight: 10,
+  },
+  input: { flex: 1, fontSize: 15, color: '#1A202C', paddingVertical: 14, fontWeight: '500' },
 
   btnRow: { flexDirection: 'row', gap: 12, marginTop: 28, marginBottom: 8 },
   cancelBtn: {
     flex: 1, backgroundColor: '#F7F8FC', borderRadius: 14,
-    paddingVertical: 15, alignItems: 'center',
+    paddingVertical: 16, alignItems: 'center',
     borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  cancelText: { color: '#718096', fontWeight: '700', fontSize: 15 },
+  cancelText: { color: '#718096', fontWeight: '800', fontSize: 15 },
   confirmBtn: {
-    flex: 2, borderRadius: 14, paddingVertical: 15,
+    flex: 2, borderRadius: 14, paddingVertical: 16,
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
   },
   confirmText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });

@@ -6,12 +6,12 @@ import { Platform } from 'react-native';
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 const tabs: { name: string; title: string; icon: IoniconsName; iconActive: IoniconsName }[] = [
-  { name: 'index',    title: 'Home',     icon: 'home-outline',        iconActive: 'home' },
-  { name: 'children', title: 'Children', icon: 'people-outline',      iconActive: 'people' },
-  { name: 'growth',   title: 'Growth',   icon: 'trending-up-outline', iconActive: 'trending-up' },
-  { name: 'vaccines', title: 'Vaccines', icon: 'shield-outline',      iconActive: 'shield' },
-  { name: 'chat',     title: 'AI Chat',  icon: 'chatbubble-outline',  iconActive: 'chatbubble' },
-  { name: 'settings', title: 'Profile',   icon: 'person-circle-outline', iconActive: 'person-circle' },
+  { name: 'index',      title: 'Home',       icon: 'home-outline',          iconActive: 'home' },
+  { name: 'children',   title: 'Children',   icon: 'people-outline',        iconActive: 'people' },
+  { name: 'growth',     title: 'Growth',     icon: 'trending-up-outline',   iconActive: 'trending-up' },
+  { name: 'vaccines',   title: 'Vaccines',   icon: 'shield-outline',        iconActive: 'shield' },
+  { name: 'milestones', title: 'Milestones', icon: 'ribbon-outline',        iconActive: 'ribbon' },
+  { name: 'settings',   title: 'Profile',    icon: 'person-circle-outline', iconActive: 'person-circle' },
 ];
 
 export default function TabLayout() {
@@ -65,8 +65,9 @@ export default function TabLayout() {
           }}
         />
       ))}
+      {/* Hidden screens — still routable but not shown in tab bar */}
+      <Tabs.Screen name="chat"      options={{ href: null }} />
       <Tabs.Screen name="nutrition" options={{ href: null }} />
-
     </Tabs>
   );
 }
