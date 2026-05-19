@@ -18,9 +18,26 @@ export default function RegisterScreen() {
     if (!name || !email || !password) { setError('Please fill in all fields.'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
     setLoading(true);
-    const { error: err } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+
+    const { data, error: err } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+
     setLoading(false);
-    if (err) setError(err.message);
+
+    if (err) { setError(err.message); return; }
+
+    if (data.user) {
+      // Update full_name in parents table (trigger creates the row, but may not set full_name)
+      await supabase
+        .from('parents')
+        .update({ full_name: name })
+        .eq('auth_user_id', data.user.id);
+
+      router.replace('/(tabs)/');
+    }
   };
 
   return (

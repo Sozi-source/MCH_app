@@ -52,13 +52,24 @@ export const useChildStore = create<ChildState>((set, get) => ({
       .single();
     if (!parentRow) return;
 
-    const { data } = await supabase
+    // Fetch children where user is primary OR second parent
+    const { data: primary } = await supabase
       .from('children')
       .select('*')
       .eq('parent_id', parentRow.id)
       .order('created_at', { ascending: false });
-    if (data) set({ children: data as Child[] });
-  },
+
+    const { data: secondary } = await supabase
+      .from('children')
+      .select('*')
+      .eq('second_parent_id', parentRow.id)
+      .order('created_at', { ascending: false });
+
+    // Merge and deduplicate by id
+    const all = [...(primary ?? []), ...(secondary ?? [])];
+    const unique = all.filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i);
+    set({ children: unique as Child[] });
+      },
 
   addChild: async (child) => {
     const { data: parentRow, error: parentErr } = await supabase

@@ -20,9 +20,28 @@ export default function LoginScreen() {
     setError('');
     if (!email || !password) { setError('Please fill in all fields.'); return; }
     setLoading(true);
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+    if (err) { setError(err.message); setLoading(false); return; }
+
+    console.log('User ID:', data.user.id);
+
+    const { data: parent, error: parentErr } = await supabase
+      .from('parents')
+      .select('role')
+      .eq('auth_user_id', data.user.id)
+      .single();
+
+    console.log('Parent:', JSON.stringify(parent));
+    console.log('Parent error:', JSON.stringify(parentErr));
+
     setLoading(false);
-    if (err) setError(err.message);
+
+    if (parent?.role === 'admin') {
+      router.replace('/(admin)/dashboard' as any);
+    } else {
+      router.replace('/(tabs)/' as any);
+    }
   };
 
   return (
