@@ -4,17 +4,28 @@ import { COLORS, RADIUS } from '@/lib/theme';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import type { NotificationPrefs } from '@/store/settingsStore';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function SettingsScreen() {
   const t = useT();
   const { user } = useAuthStore();
   const router = useRouter();
-  const { language, setLanguage } = useSettingsStore();
+  const { language, setLanguage, notifPrefs, setNotifPref } = useSettingsStore();
 
   const handleLanguage = (lang: Language) => setLanguage(lang, user?.id);
+  const handleNotifToggle = (key: keyof NotificationPrefs, value: boolean) =>
+    setNotifPref(key, value, user?.id);
 
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -24,6 +35,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.avatarCircle}>
           <Text style={styles.avatarText}>{initials}</Text>
@@ -32,6 +44,7 @@ export default function SettingsScreen() {
         <Text style={styles.headerEmail}>{user?.email}</Text>
       </View>
 
+      {/* ── Preferences ── */}
       <Text style={styles.sectionLabel}>PREFERENCES</Text>
       <View style={styles.card}>
         <View style={styles.cardRow}>
@@ -58,6 +71,35 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* ── Notifications ── */}
+      <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
+      <View style={styles.card}>
+        <NotifRow
+          icon="medkit-outline"
+          title="Vaccine Reminders"
+          sub="3-day alerts before upcoming vaccines"
+          value={notifPrefs.vaccineReminders}
+          onToggle={v => handleNotifToggle('vaccineReminders', v)}
+        />
+        <View style={styles.divider} />
+        <NotifRow
+          icon="stats-chart-outline"
+          title="Growth Alerts"
+          sub="Immediate alerts for z-score concerns"
+          value={notifPrefs.growthAlerts}
+          onToggle={v => handleNotifToggle('growthAlerts', v)}
+        />
+        <View style={styles.divider} />
+        <NotifRow
+          icon="sunny-outline"
+          title="Daily Health Tips"
+          sub="Morning tip at 8am every day"
+          value={notifPrefs.dailyTips}
+          onToggle={v => handleNotifToggle('dailyTips', v)}
+        />
+      </View>
+
+      {/* ── Data ── */}
       <Text style={styles.sectionLabel}>DATA</Text>
       <View style={styles.card}>
         <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/reports')}>
@@ -72,6 +114,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── About ── */}
       <Text style={styles.sectionLabel}>ABOUT</Text>
       <View style={styles.card}>
         <View style={styles.infoRow}>
@@ -80,11 +123,12 @@ export default function SettingsScreen() {
           </View>
           <View>
             <Text style={styles.cardTitle}>Mother and Child</Text>
-            <Text style={styles.cardSub}>Version 1.0.0 Ãƒâ€šÃ‚Â· Powered by Zuri Health</Text>
+            <Text style={styles.cardSub}>Version 1.0.0 · Powered by Zuri Health</Text>
           </View>
         </View>
       </View>
 
+      {/* ── Account ── */}
       <Text style={styles.sectionLabel}>ACCOUNT</Text>
       <View style={styles.card}>
         <View style={styles.infoRow}>
@@ -98,12 +142,50 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-
-
       <View style={{ height: 120 }} />
     </ScrollView>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function NotifRow({
+  icon,
+  title,
+  sub,
+  value,
+  onToggle,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  title: string;
+  sub: string;
+  value: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <View style={styles.notifRow}>
+      <View style={styles.cardIconCircle}>
+        <Ionicons name={icon} size={18} color={COLORS.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardSub}>{sub}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        trackColor={{ false: COLORS.border, true: COLORS.primary }}
+        thumbColor={Platform.OS === 'android' ? (value ? COLORS.white : COLORS.textMuted) : undefined}
+      />
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container:       { flex: 1, backgroundColor: COLORS.background },
@@ -117,6 +199,7 @@ const styles = StyleSheet.create({
   card:            { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, marginHorizontal: 16, padding: 16, borderWidth: 1, borderColor: COLORS.border, gap: 14 },
   cardRow:         { flexDirection: 'row', alignItems: 'center', gap: 10 },
   infoRow:         { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  notifRow:        { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cardIconCircle:  { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
   cardTitle:       { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
   cardSub:         { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
@@ -125,5 +208,5 @@ const styles = StyleSheet.create({
   langBtnActive:   { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
   langLabel:       { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary },
   langLabelActive: { color: COLORS.primary },
-
+  divider:         { height: 1, backgroundColor: COLORS.border, marginHorizontal: -2 },
 });
