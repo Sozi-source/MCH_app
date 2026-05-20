@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+﻿import { supabase } from '@/lib/supabase';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -37,7 +37,7 @@ export default function ForgotPasswordScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
           <Ionicons name="lock-closed" size={48} color={COLORS.onPrimary} />
-          <Text style={styles.heroTitle}>Mama na Mtoto</Text>
+          <Text style={styles.heroTitle}>ZuriHealth</Text>
           <Text style={styles.heroSub}>Reset your password</Text>
         </View>
 
@@ -120,3 +120,4 @@ const styles = StyleSheet.create({
   successText:   { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   successEmail:  { fontWeight: '700', color: COLORS.textPrimary },
 });
+

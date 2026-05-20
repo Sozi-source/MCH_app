@@ -1,6 +1,6 @@
-/**
+﻿/**
  * src/app/(admin)/analytics.tsx
- * Admin Analytics Screen for mamaTOTO
+ * Admin Analytics Screen for ZuriHealth
  */
 
 import { supabase } from '@/lib/supabase';
@@ -465,3 +465,4 @@ const styles = StyleSheet.create({
   aiCount: { fontSize: 48, fontWeight: '900', color: '#9C27B0' },
   aiDesc: { flex: 1, fontSize: 13, color: '#666', lineHeight: 18 },
 });
+

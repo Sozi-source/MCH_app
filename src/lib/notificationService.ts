@@ -1,6 +1,6 @@
-/**
+﻿/**
  * src/lib/notificationService.ts
- * mamaTOTO — Production Notification Service
+ * ZuriHealth — Production Notification Service
  *
  * Lazy-loads expo-notifications so the app runs normally on builds that
  * don't yet have the native module compiled in (e.g. old dev APK).
@@ -54,10 +54,10 @@ const STORAGE_KEYS = {
 };
 
 const CHANNELS = {
-  URGENT:   'mamatoto-urgent',
-  VACCINES: 'mamatoto-vaccines',
-  GROWTH:   'mamatoto-growth',
-  TIPS:     'mamatoto-tips',
+  URGENT:   'ZuriHealth-urgent',
+  VACCINES: 'ZuriHealth-vaccines',
+  GROWTH:   'ZuriHealth-growth',
+  TIPS:     'ZuriHealth-tips',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ async function scheduleDailyTip(): Promise<void> {
 
   await N.scheduleNotificationAsync({
     content: {
-      title: '🌟 Mama na Mtoto Health Tip',
+      title: '🌟 ZuriHealth Health Tip',
       body:  "Open the app to see today's verified nutrition and health tip for your child.",
       data:  { type: 'daily_tip', screen: '/(tabs)/index' },
       ...(Platform.OS === 'android' && { channelId: CHANNELS.TIPS }),

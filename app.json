@@ -1,7 +1,7 @@
-{
+﻿{
   "expo": {
-    "name": "Mother and Child",
-    "slug": "mamaTOTO",
+    "name": "ZuriHealth",
+    "slug": "zurihealth",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,7 +43,8 @@
           "defaultChannel": "mamatoto-urgent",
           "enableBackgroundRemoteNotifications": false
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": false,
@@ -56,3 +57,4 @@
     }
   }
 }
+

@@ -1,6 +1,6 @@
 ﻿/**
  * src/app/(tabs)/index.tsx
- * mamaTOTO — Premium Home Screen
+ * ZuriHealth — Premium Home Screen
  */
 
 import { useAuthStore } from '@/store/authStore';

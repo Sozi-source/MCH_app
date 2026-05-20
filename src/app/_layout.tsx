@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '@/lib/theme';
+import { setupNotifications, registerTapHandler } from '@/lib/notificationService';
 
 // Screens where the FAB should NOT appear
 const FAB_HIDDEN_SEGMENTS = ['(auth)', '(admin)'];
@@ -16,7 +17,6 @@ function ZuriFAB() {
   const router = useRouter();
   const segments = useSegments();
 
-  // Hide FAB on auth and admin screens
   const currentGroup = segments[0] as string;
   if (FAB_HIDDEN_SEGMENTS.includes(currentGroup)) return null;
 
@@ -60,6 +60,13 @@ export default function RootLayout() {
     }
   }, [session, hydrated, segments]);
 
+  // ── Notifications ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    setupNotifications();
+    const sub = registerTapHandler(router);
+    return () => sub.remove();
+  }, []);
+
   return (
     <>
       <StatusBar style="auto" />
@@ -87,7 +94,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    // Sit just above the floating tab bar (80 tab + 48 margin + 16 gap)
     bottom: Platform.OS === 'web' ? 76 : 158,
     right: 20,
     width: 56,

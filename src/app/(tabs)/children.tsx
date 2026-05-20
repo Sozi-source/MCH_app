@@ -1,4 +1,4 @@
-// src/app/(tabs)/children.tsx
+﻿// src/app/(tabs)/children.tsx
 import { useT } from '@/hooks/useT';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -281,7 +281,7 @@ export default function ChildrenScreen() {
               <Ionicons name="people" size={20} color={COLORS.primary} />
             </View>
             <View>
-              <Text style={styles.headerLabel}>mamaTOTO</Text>
+              <Text style={styles.headerLabel}>ZuriHealth</Text>
               <Text style={styles.headerTitle}>{t('tab_children')}</Text>
             </View>
           </View>

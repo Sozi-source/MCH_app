@@ -1,6 +1,6 @@
-/**
+﻿/**
  * src/app/(tabs)/milestones.tsx
- * mamaTOTO — Premium Milestone Tracker
+ * ZuriHealth — Premium Milestone Tracker
  * 0–5 years · Motor, Language, Social, Cognitive
  */
 

@@ -1,6 +1,6 @@
-// src/app/(tabs)/settings.tsx
-// mamaTOTO — Settings Screen (Full Visual Redesign)
-// Strictly follows all 12 mamaTOTO design rules
+﻿// src/app/(tabs)/settings.tsx
+// ZuriHealth — Settings Screen (Full Visual Redesign)
+// Strictly follows all 12 ZuriHealth design rules
 
 import { useT } from '@/hooks/useT';
 import { Language } from '@/lib/i18n';
@@ -150,7 +150,7 @@ export default function SettingsScreen() {
 
   const handleSignOut = () => {
     if (Platform.OS === 'web') {
-      if (window.confirm('Sign out of mamaTOTO?')) signOut?.();
+      if (window.confirm('Sign out of ZuriHealth?')) signOut?.();
     } else {
       Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
         { text: 'Cancel', style: 'cancel' },
@@ -217,7 +217,7 @@ export default function SettingsScreen() {
           <View style={s.heroStatDivider} />
           <View style={s.heroStat}>
             <Ionicons name="leaf-outline" size={14} color="rgba(255,255,255,0.8)" />
-            <Text style={s.heroStatText}>mamaTOTO v1.0</Text>
+            <Text style={s.heroStatText}>ZuriHealth v1.0</Text>
           </View>
           <View style={s.heroStatDivider} />
           <View style={s.heroStat}>
@@ -319,7 +319,7 @@ export default function SettingsScreen() {
             <Text style={s.tipTitle}>💡 Why notifications matter</Text>
             <Text style={s.tipBody}>
               Timely vaccine reminders can prevent up to 2–3 million child deaths
-              annually. Stay on schedule with mamaTOTO alerts.
+              annually. Stay on schedule with ZuriHealth alerts.
             </Text>
           </View>
         </View>
@@ -370,7 +370,7 @@ export default function SettingsScreen() {
           <View style={[s.aboutActionIcon, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
             <Ionicons name="heart" size={20} color={COLORS.onPrimary} />
           </View>
-          <Text style={s.aboutActionTitle}>mamaTOTO</Text>
+          <Text style={s.aboutActionTitle}>ZuriHealth</Text>
           <Text style={s.aboutActionSub}>
             Maternal & child health tracking{'\n'}powered by Zuri Health · v1.0.0
           </Text>

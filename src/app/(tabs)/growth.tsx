@@ -1,6 +1,6 @@
-// src/app/(tabs)/growth.tsx
-// mamaTOTO — Growth Tracker Screen (Full Visual Redesign)
-// Strictly follows all 12 mamaTOTO design rules
+﻿// src/app/(tabs)/growth.tsx
+// ZuriHealth — Growth Tracker Screen (Full Visual Redesign)
+// Strictly follows all 12 ZuriHealth design rules
 
 import { useT } from '@/hooks/useT';
 import { COLORS, RADIUS } from '@/lib/theme';

@@ -1,6 +1,6 @@
-// =============================================================================
+ï»¿// =============================================================================
 //  src/lib/nutritionData.ts
-//  mamaTOTO â€” Verified Nutrition & Growth Reference Data
+//  ZuriHealth â€” Verified Nutrition & Growth Reference Data
 //
 //  SOURCES:
 //    Â· WHO IYCF Guidelines, 2003
@@ -486,18 +486,18 @@ export function getZScoreAlerts(
 
       // Age-sensitive action overrides
       if (ageMonths < 6) {
-        // Under 6 months: exclusive breastfeeding period — no complementary food advice
+        // Under 6 months: exclusive breastfeeding period ï¿½ no complementary food advice
         if (matched.indicator === 'WHZ' && matched.urgency === 'urgent') {
-          action = 'Your baby is under 6 months and showing signs of acute malnutrition. Increase breastfeeding frequency immediately — feed on demand at least 10-12 times per day including at night. Do NOT give any other foods or fluids. Refer to the nearest MCH clinic or hospital TODAY for therapeutic assessment.';
+          action = 'Your baby is under 6 months and showing signs of acute malnutrition. Increase breastfeeding frequency immediately ï¿½ feed on demand at least 10-12 times per day including at night. Do NOT give any other foods or fluids. Refer to the nearest MCH clinic or hospital TODAY for therapeutic assessment.';
         } else if (matched.indicator === 'WAZ' && matched.urgency === 'urgent') {
-          action = 'Your baby is under 6 months and severely underweight. This requires urgent review. Ensure exclusive breastfeeding on demand (no water, no formula, no porridge). Go to the nearest MCH clinic or hospital immediately — the baby may need inpatient nutritional support.';
+          action = 'Your baby is under 6 months and severely underweight. This requires urgent review. Ensure exclusive breastfeeding on demand (no water, no formula, no porridge). Go to the nearest MCH clinic or hospital immediately ï¿½ the baby may need inpatient nutritional support.';
         } else if (matched.indicator === 'HAZ') {
           action = 'Stunting at this age reflects poor nutrition before or shortly after birth. Ensure the mother is eating well and breastfeeding exclusively on demand. Attend your next MCH clinic visit and inform the nurse.';
         } else if (matched.urgency === 'monitor') {
           action = 'Continue exclusive breastfeeding on demand. Monitor weight weekly at home or at the MCH clinic. No complementary foods should be introduced before 6 months.';
         }
       } else if (ageMonths < 12) {
-        // 6–11 months: just starting complementary foods
+        // 6ï¿½11 months: just starting complementary foods
         if (matched.indicator === 'WHZ' && matched.urgency === 'urgent') {
           action = 'Your baby has acute malnutrition. Continue breastfeeding on demand AND increase complementary meal frequency to 3-4 times per day. Add energy-dense foods: mashed liver, eggs, groundnut paste, mashed beans with oil. Refer to MCH clinic immediately for enrolment in the Supplementary Feeding Programme (SFP).';
         } else if (matched.indicator === 'WAZ' && matched.urgency === 'urgent') {
@@ -508,11 +508,11 @@ export function getZScoreAlerts(
           action = matched.action + ' At this age, continue breastfeeding and ensure 2-3 complementary meals per day with iron-rich foods and added oil or fat.';
         }
       } else if (ageMonths < 24) {
-        // 12–23 months: family foods, breastfeeding still important
+        // 12ï¿½23 months: family foods, breastfeeding still important
         if (matched.indicator === 'WHZ' && matched.urgency === 'urgent') {
           action = 'Your child has acute malnutrition. Offer 3-4 meals and 1-2 nutritious snacks daily. Include: eggs, mashed liver, groundnut paste, omena, beans, and always add oil to meals. Continue breastfeeding. Refer to MCH clinic immediately for RUTF or SFP assessment.';
         } else if (matched.indicator === 'WAZ' && matched.urgency === 'urgent') {
-          action = 'Your child is severely underweight. Increase meal frequency to 4 times per day with energy-dense foods. Continue breastfeeding — it still provides up to 50% of energy needs. Visit the MCH clinic urgently.';
+          action = 'Your child is severely underweight. Increase meal frequency to 4 times per day with energy-dense foods. Continue breastfeeding ï¿½ it still provides up to 50% of energy needs. Visit the MCH clinic urgently.';
         } else if (matched.urgency === 'monitor') {
           action = matched.action + ' Ensure your child gets 3 meals and 1-2 snacks daily with foods from all 7 food groups. Continue breastfeeding up to 2 years.';
         }
