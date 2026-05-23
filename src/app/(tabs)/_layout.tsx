@@ -1,17 +1,44 @@
 ﻿import { COLORS } from '@/lib/theme';
-import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 
-type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+const tabs: {
+  name: string;
+  title: string;
+  active: any;
+  inactive: any;
+}[] = [
+  {
+    name: 'index',
+    title: 'Home',
+    active:   require('@/assets/tabs/tab-home-active.png'),
+    inactive: require('@/assets/tabs/tab-home-inactive.png'),
+  },
+  {
+    name: 'children',
+    title: 'Children',
+    active:   require('@/assets/tabs/tab-children-active.png'),
+    inactive: require('@/assets/tabs/tab-children-inactive.png'),
+  },
+  {
+    name: 'growth',
+    title: 'Growth',
+    active:   require('@/assets/tabs/tab-growth-active.png'),
+    inactive: require('@/assets/tabs/tab-growth-inactive.png'),
+  },
+  {
+    name: 'vaccines',
+    title: 'Vaccines',
+    active:   require('@/assets/tabs/tab-vaccines-active.png'),
+    inactive: require('@/assets/tabs/tab-vaccines-inactive.png'),
+  },
+  {
+    name: 'milestones',
+    title: 'Progress',
+    active:   require('@/assets/tabs/tab-progress-active.png'),
+    inactive: require('@/assets/tabs/tab-progress-inactive.png'),
+  },
 
-const tabs: { name: string; title: string; icon: IoniconsName; iconActive: IoniconsName }[] = [
-  { name: 'index',      title: 'Home',       icon: 'home-outline',          iconActive: 'home' },
-  { name: 'children',   title: 'Children',   icon: 'people-outline',        iconActive: 'people' },
-  { name: 'growth',     title: 'Growth',     icon: 'trending-up-outline',   iconActive: 'trending-up' },
-  { name: 'vaccines',   title: 'Vaccines',   icon: 'shield-outline',        iconActive: 'shield' },
-  { name: 'milestones', title: 'Milestones', icon: 'ribbon-outline',        iconActive: 'ribbon' },
-  { name: 'settings',   title: 'Profile',    icon: 'person-circle-outline', iconActive: 'person-circle' },
 ];
 
 export default function TabLayout() {
@@ -20,7 +47,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarInactiveTintColor: '#94A3B8',
         tabBarStyle: Platform.OS === 'web' ? {
           backgroundColor: COLORS.white,
           borderTopColor: COLORS.border,
@@ -30,26 +57,36 @@ export default function TabLayout() {
           height: 60,
         } : {
           backgroundColor: COLORS.white,
-          borderTopColor: COLORS.border,
-          borderTopWidth: 1,
-          paddingBottom: 20,
-          paddingTop: 6,
-          height: 80,
-          marginBottom: 48,
+          borderTopColor: 'transparent',
+          borderTopWidth: 0,
+          paddingBottom: 10,
+          paddingTop: 10,
+          height: 90,
+          marginBottom: 20,
           marginHorizontal: 16,
-          borderRadius: 20,
+          borderRadius: 24,
           position: 'absolute',
           bottom: 0,
-          elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
+          elevation: 12,
+
+          ...Platform.select({
+
+            ios: { shadowColor: '#208AEF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16 },
+
+            android: { elevation: 13 },
+
+            default: {},
+
+          }),
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-          marginTop: 2,
+          fontSize: 10,
+          fontWeight: '700',
+          marginTop: 3,
+          letterSpacing: 0.2,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
         },
       }}
     >
@@ -59,14 +96,19 @@ export default function TabLayout() {
           name={t.name}
           options={{
             title: t.title,
-            tabBarIcon: ({ focused, color }) => (
-              <Ionicons name={focused ? t.iconActive : t.icon} size={24} color={color} />
+            tabBarIcon: ({ focused }) => (
+              <Image
+                source={focused ? t.active : t.inactive}
+                style={{ width: 28, height: 28, resizeMode: 'contain' }}
+              />
             ),
           }}
         />
       ))}
       {/* Hidden screens — still routable but not shown in tab bar */}
-      <Tabs.Screen name="chat"      options={{ href: null }} />
+      <Tabs.Screen name="chat"         options={{ href: null }} />
+      <Tabs.Screen name="settings"     options={{ href: null }} />
+      <Tabs.Screen name="reviews"      options={{ href: null }} />
       <Tabs.Screen name="nutrition" options={{ href: null }} />
     </Tabs>
   );

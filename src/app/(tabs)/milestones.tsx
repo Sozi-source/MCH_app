@@ -1,17 +1,22 @@
-﻿/**
+﻿function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase());
+}
+
+/**
  * src/app/(tabs)/milestones.tsx
- * ZuriHealth — Premium Milestone Tracker
- * 0–5 years · Motor, Language, Social, Cognitive
+ * ZuriHealth — Milestone Tracker (Revamped)
+ * Professional PNG icons · no inline Ionicons
  */
 
 import { supabase } from '@/lib/supabase';
-import { COLORS, RADIUS } from '@/lib/theme';
+import { COLORS, FONTS, RADIUS } from '@/lib/theme';
 import { useChildStore } from '@/store/childStore';
-import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -19,6 +24,20 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+// ── Icon map ──────────────────────────────────────────────────────────────────
+
+const ICONS = {
+  // Category
+  motor:     require('@/assets/milestones/cat-motor.png'),
+  language:  require('@/assets/milestones/cat-language.png'),
+  social:    require('@/assets/milestones/cat-social.png'),
+  cognitive: require('@/assets/milestones/cat-cognitive.png'),
+  // Status
+  achieved:    require('@/assets/milestones/status-achieved.png'),
+  in_progress: require('@/assets/milestones/status-in-progress.png'),
+  not_yet:     require('@/assets/milestones/status-not-yet.png'),
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -93,35 +112,34 @@ const MILESTONE_DATA: Omit<Milestone, 'status' | 'achievedDate'>[] = [
   { id: 'm_60_lan_1', ageMonths: 60, ageLabel: '5 years',   category: 'language', title: 'Uses full sentences',         description: 'Speaks in full grammatically correct sentences' },
   { id: 'm_60_lan_2', ageMonths: 60, ageLabel: '5 years',   category: 'language', title: 'Asks "why" questions',        description: 'Asks many "why" and "how" questions' },
   { id: 'm_60_soc_1', ageMonths: 60, ageLabel: '5 years',   category: 'social',   title: 'Follows rules in games',      description: 'Understands and follows rules in group games' },
-  { id: 'm_60_cog_1', ageMonths: 60, ageLabel: '5 years',   category: 'cognitive',title: 'Counts to 20+',              description: 'Counts objects reliably beyond 20' },
+  { id: 'm_60_cog_1', ageMonths: 60, ageLabel: '5 years',   category: 'cognitive',title: 'Counts to 20+',               description: 'Counts objects reliably beyond 20' },
   { id: 'm_60_cog_2', ageMonths: 60, ageLabel: '5 years',   category: 'cognitive',title: 'Knows letters of alphabet',   description: 'Recognises most letters of the alphabet' },
 ];
 
 // ── Category config ───────────────────────────────────────────────────────────
 
 const CATEGORIES: {
-  key: Category; label: string; icon: string;
-  color: string; bg: string; emoji: string;
+  key: Category; label: string; color: string; bg: string; iconBg: string;
 }[] = [
-  { key: 'motor',    label: 'Motor',    icon: 'body',          color: '#FF6B35', bg: '#FFF0EB', emoji: '🏃' },
-  { key: 'language', label: 'Language', icon: 'chatbubble',    color: '#1D9E75', bg: '#E6F7F2', emoji: '💬' },
-  { key: 'social',   label: 'Social',   icon: 'people',        color: '#9C27B0', bg: '#F3E5F5', emoji: '🤝' },
-  { key: 'cognitive',label: 'Cognitive',icon: 'bulb',          color: '#FF9800', bg: '#FFF8E1', emoji: '🧠' },
+  { key: 'motor',    label: 'Motor',     color: '#FF6B35', bg: '#FFF0EB', iconBg: '#FFE4D6' },
+  { key: 'language', label: 'Language',  color: '#1D9E75', bg: '#E6F7F2', iconBg: '#C8EEE3' },
+  { key: 'social',   label: 'Social',    color: '#9C27B0', bg: '#F3E5F5', iconBg: '#E4C8F0' },
+  { key: 'cognitive',label: 'Cognitive', color: '#E65100', bg: '#FFF3E0', iconBg: '#FFE0B2' },
 ];
 
 const STATUS_CONFIG: Record<MilestoneStatus, {
-  label: string; color: string; bg: string; icon: string; emoji: string;
+  label: string; color: string; bg: string; borderColor: string;
 }> = {
-  achieved:    { label: 'Achieved',    color: '#1D9E75', bg: '#E6F7F2', icon: 'checkmark-circle', emoji: '🎉' },
-  in_progress: { label: 'In Progress', color: '#FF9800', bg: '#FFF8E1', icon: 'time',             emoji: '⏳' },
-  not_yet:     { label: 'Not Yet',     color: '#A0AEC0', bg: '#F7FAFC', icon: 'ellipse-outline',  emoji: '' },
+  achieved:    { label: 'Achieved',    color: '#1D9E75', bg: '#E6F7F2', borderColor: '#9FE1CB' },
+  in_progress: { label: 'In Progress', color: '#E65100', bg: '#FFF3E0', borderColor: '#FFCC80' },
+  not_yet:     { label: 'Not Yet',     color: '#94A3B8', bg: '#F8FAFC', borderColor: '#E2E8F0' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getAgeMonths(dob: string): number {
   const birth = new Date(dob);
-  const now = new Date();
+  const now   = new Date();
   return Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
 }
 
@@ -134,7 +152,87 @@ function groupByAge(milestones: Milestone[]) {
   return groups;
 }
 
-// ── Category Summary Cards ────────────────────────────────────────────────────
+// ── AnimatedMilestoneCard ─────────────────────────────────────────────────────
+
+function MilestoneCard({
+  m, catCfg, saving, onPress,
+}: {
+  m: Milestone;
+  catCfg: typeof CATEGORIES[0];
+  saving: boolean;
+  onPress: () => void;
+}) {
+  const cfg        = STATUS_CONFIG[m.status];
+  const isAchieved = m.status === 'achieved';
+  const scaleAnim  = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.97, duration: 80, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1,    duration: 120, useNativeDriver: true }),
+    ]).start();
+    onPress();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[
+          styles.card,
+          { borderLeftColor: catCfg.color },
+          isAchieved && styles.cardAchieved,
+        ]}
+        onPress={handlePress}
+        activeOpacity={1}
+        disabled={saving}
+      >
+        {/* Category icon */}
+        <View style={[styles.cardIconWrap, { backgroundColor: catCfg.iconBg }]}>
+          <Image
+            source={ICONS[m.category]}
+            style={styles.cardIcon}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Content */}
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardTitle, isAchieved && { color: '#1D9E75' }]} numberOfLines={1}>
+            {m.title}
+          </Text>
+          <Text style={styles.cardDesc} numberOfLines={2}>{m.description}</Text>
+
+          {isAchieved && m.achievedDate && (
+            <View style={styles.achievedRow}>
+              <Image source={ICONS.achieved} style={styles.tinyIcon} resizeMode="contain" />
+              <Text style={styles.achievedText}>Achieved {m.achievedDate}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Status toggle */}
+        <View style={styles.cardRight}>
+          {saving ? (
+            <ActivityIndicator size="small" color={catCfg.color} />
+          ) : (
+            <View style={[styles.statusBtn, {
+              backgroundColor: cfg.bg,
+              borderColor: cfg.borderColor,
+            }]}>
+              <Image
+                source={ICONS[m.status]}
+                style={styles.statusIcon}
+                resizeMode="contain"
+              />
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ── Category Filter Card ──────────────────────────────────────────────────────
 
 function CategoryCard({
   cat, milestones, active, onPress,
@@ -154,90 +252,35 @@ function CategoryCard({
         styles.catCard,
         active
           ? { backgroundColor: cat.color, borderColor: cat.color }
-          : { backgroundColor: '#fff', borderColor: '#E2E8F0' },
+          : { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' },
       ]}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.85}
     >
+      {/* Icon */}
       <View style={[
-        styles.catCardIcon,
-        { backgroundColor: active ? 'rgba(255,255,255,0.25)' : cat.bg },
+        styles.catIconWrap,
+        { backgroundColor: active ? 'rgba(255,255,255,0.22)' : cat.iconBg },
       ]}>
-        <Text style={styles.catEmoji}>{cat.emoji}</Text>
+        <Image
+          source={ICONS[cat.key]}
+          style={styles.catIcon}
+          resizeMode="contain"
+        />
       </View>
-      <Text style={[styles.catCardLabel, active && { color: '#fff' }]}>{cat.label}</Text>
-      <Text style={[styles.catCardPct, active && { color: 'rgba(255,255,255,0.9)' }]}>
+
+      <Text style={[styles.catLabel, active && { color: '#fff' }]}>{cat.label}</Text>
+
+      <Text style={[styles.catFraction, active && { color: 'rgba(255,255,255,0.85)' }]}>
         {achieved}/{total}
       </Text>
-      {/* Mini progress bar */}
-      <View style={[styles.catBar, { backgroundColor: active ? 'rgba(255,255,255,0.25)' : '#F0F4F8' }]}>
+
+      {/* Progress bar */}
+      <View style={[styles.catBar, { backgroundColor: active ? 'rgba(255,255,255,0.22)' : '#EEF2F7' }]}>
         <View style={[
           styles.catBarFill,
-          {
-            width: `${pct}%` as any,
-            backgroundColor: active ? '#fff' : cat.color,
-          },
+          { width: `${pct}%` as any, backgroundColor: active ? '#fff' : cat.color },
         ]} />
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ── Milestone Card ────────────────────────────────────────────────────────────
-
-function MilestoneCard({
-  m, catCfg, saving, onPress,
-}: {
-  m: Milestone;
-  catCfg: typeof CATEGORIES[0];
-  saving: boolean;
-  onPress: () => void;
-}) {
-  const cfg = STATUS_CONFIG[m.status];
-  const isAchieved = m.status === 'achieved';
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        isAchieved && styles.cardAchieved,
-        { borderLeftColor: catCfg.color },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.75}
-      disabled={saving}
-    >
-      {/* Category icon */}
-      <View style={[styles.cardIconWrap, { backgroundColor: catCfg.bg }]}>
-        <Ionicons name={catCfg.icon as any} size={18} color={catCfg.color} />
-      </View>
-
-      {/* Text */}
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleRow}>
-          <Text style={[styles.cardTitle, isAchieved && styles.cardTitleAchieved]}>
-            {m.title}
-          </Text>
-          {isAchieved && <Text style={styles.achievedEmoji}>🎉</Text>}
-        </View>
-        <Text style={styles.cardDesc}>{m.description}</Text>
-        {isAchieved && m.achievedDate && (
-          <View style={styles.achievedDateRow}>
-            <Ionicons name="checkmark-circle" size={11} color="#1D9E75" />
-            <Text style={styles.achievedDateText}>Achieved {m.achievedDate}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Status button */}
-      <View style={styles.cardRight}>
-        {saving ? (
-          <ActivityIndicator size="small" color={catCfg.color} />
-        ) : (
-          <View style={[styles.statusBtn, { backgroundColor: cfg.bg, borderColor: cfg.color + '40' }]}>
-            <Ionicons name={cfg.icon as any} size={18} color={cfg.color} />
-          </View>
-        )}
       </View>
     </TouchableOpacity>
   );
@@ -249,10 +292,10 @@ export default function MilestonesScreen() {
   const { children, selectedChildId } = useChildStore();
   const child = children.find(c => c.id === selectedChildId) ?? children[0];
 
-  const [milestones, setMilestones]       = useState<Milestone[]>([]);
-  const [loading, setLoading]             = useState(true);
+  const [milestones, setMilestones]         = useState<Milestone[]>([]);
+  const [loading, setLoading]               = useState(true);
   const [activeCategory, setActiveCategory] = useState<Category | 'all'>('all');
-  const [saving, setSaving]               = useState<string | null>(null);
+  const [saving, setSaving]                 = useState<string | null>(null);
 
   const childAgeMonths = child?.date_of_birth ? getAgeMonths(child.date_of_birth) : null;
 
@@ -268,7 +311,7 @@ export default function MilestonesScreen() {
         .select('*')
         .eq('child_id', childId);
 
-      const saved = data ?? [];
+      const saved  = data ?? [];
       const merged: Milestone[] = MILESTONE_DATA.map(m => {
         const record = saved.find((s: any) => s.milestone_id === m.id);
         return {
@@ -306,7 +349,7 @@ export default function MilestonesScreen() {
           : m,
       ));
       if (nextStatus === 'achieved') {
-        Alert.alert('🎉 Milestone achieved!', `${milestone.title} — amazing progress!`);
+        Alert.alert('Milestone achieved!', `${milestone.title} — amazing progress!`);
       }
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Could not save');
@@ -315,20 +358,18 @@ export default function MilestonesScreen() {
     }
   };
 
-  // Stats
+  // ── Computed ───────────────────────────────────────────────────────────────
   const total      = milestones.length;
   const achieved   = milestones.filter(m => m.status === 'achieved').length;
   const inProgress = milestones.filter(m => m.status === 'in_progress').length;
   const pct        = total > 0 ? Math.round((achieved / total) * 100) : 0;
 
-  // Filtered + grouped
   const filtered = milestones.filter(m =>
     activeCategory === 'all' || m.category === activeCategory,
   );
   const groups = groupByAge(filtered);
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-
+  // ── No child state ─────────────────────────────────────────────────────────
   if (!child) return (
     <View style={styles.screen}>
       <View style={styles.hero}>
@@ -336,11 +377,9 @@ export default function MilestonesScreen() {
         <Text style={styles.heroSub}>Developmental tracker · 0–5 years</Text>
       </View>
       <View style={styles.emptyState}>
-        <Text style={styles.emptyEmoji}>🏆</Text>
+        <Image source={ICONS.achieved} style={{ width: 72, height: 72, opacity: 0.35 }} resizeMode="contain" />
         <Text style={styles.emptyTitle}>No child selected</Text>
-        <Text style={styles.emptySub}>
-          Go to the Children tab to select or add a child first.
-        </Text>
+        <Text style={styles.emptySub}>Go to the Children tab to select or add a child first.</Text>
       </View>
     </View>
   );
@@ -350,37 +389,46 @@ export default function MilestonesScreen() {
 
       {/* ── Hero Header ──────────────────────────────────────────────── */}
       <View style={styles.hero}>
+        {/* Decorative circles */}
+        <View style={styles.decorCircle1} />
+        <View style={styles.decorCircle2} />
+
         <View style={styles.heroTop}>
-          <View>
-            <Text style={styles.heroTitle}>Milestones 🏆</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroTitle}>Milestones</Text>
             <Text style={styles.heroSub}>
-              {child.full_name}
-              {childAgeMonths !== null ? ` · ${childAgeMonths} months old` : ''}
+              {toTitleCase(child.full_name)}
+              {childAgeMonths !== null ? ` · ${childAgeMonths} mo` : ''}
             </Text>
           </View>
-          {/* Progress ring */}
-          <View style={styles.ringWrap}>
-            <View style={styles.ring}>
+
+          {/* Circular progress ring */}
+          <View style={styles.ringOuter}>
+            <View style={styles.ringInner}>
               <Text style={styles.ringPct}>{pct}%</Text>
               <Text style={styles.ringLabel}>done</Text>
             </View>
           </View>
         </View>
 
-        {/* Overall progress bar */}
+        {/* Progress bar */}
         <View style={styles.heroBar}>
           <View style={[styles.heroBarFill, { width: `${pct}%` as any }]} />
         </View>
-        <View style={styles.heroStats}>
-          <Text style={styles.heroStatText}>
-            <Text style={styles.heroStatNum}>{achieved}</Text> achieved
-          </Text>
-          <Text style={styles.heroStatText}>
-            <Text style={styles.heroStatNum}>{inProgress}</Text> in progress
-          </Text>
-          <Text style={styles.heroStatText}>
-            <Text style={styles.heroStatNum}>{total - achieved - inProgress}</Text> not yet
-          </Text>
+
+        {/* Stat pills */}
+        <View style={styles.statRow}>
+          {[
+            { icon: ICONS.achieved,    label: 'Achieved',    value: achieved,                      bg: 'rgba(29,158,117,0.25)' },
+            { icon: ICONS.in_progress, label: 'In Progress', value: inProgress,                    bg: 'rgba(230,81,0,0.22)' },
+            { icon: ICONS.not_yet,     label: 'Not Yet',     value: total - achieved - inProgress,  bg: 'rgba(255,255,255,0.14)' },
+          ].map(s => (
+            <View key={s.label} style={[styles.statPill, { backgroundColor: s.bg }]}>
+              <Image source={s.icon} style={styles.statIcon} resizeMode="contain" />
+              <Text style={styles.statValue}>{s.value}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -389,13 +437,14 @@ export default function MilestonesScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Category Cards ──────────────────────────────────────────── */}
+        {/* ── Category Filter ─────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Categories</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.catRow}
         >
+          {/* All pill */}
           <TouchableOpacity
             style={[
               styles.catCard,
@@ -404,19 +453,23 @@ export default function MilestonesScreen() {
                 : { backgroundColor: '#fff', borderColor: '#E2E8F0' },
             ]}
             onPress={() => setActiveCategory('all')}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <View style={[styles.catCardIcon, {
-              backgroundColor: activeCategory === 'all' ? 'rgba(255,255,255,0.25)' : COLORS.primaryLight,
+            <View style={[styles.catIconWrap, {
+              backgroundColor: activeCategory === 'all' ? 'rgba(255,255,255,0.22)' : COLORS.primaryLight,
             }]}>
-              <Text style={styles.catEmoji}>✨</Text>
+              <View style={styles.allDots}>
+                {[ICONS.motor, ICONS.language, ICONS.social, ICONS.cognitive].map((src, i) => (
+                  <Image key={i} source={src} style={styles.allDotIcon} resizeMode="contain" />
+                ))}
+              </View>
             </View>
-            <Text style={[styles.catCardLabel, activeCategory === 'all' && { color: '#fff' }]}>All</Text>
-            <Text style={[styles.catCardPct, activeCategory === 'all' && { color: 'rgba(255,255,255,0.9)' }]}>
+            <Text style={[styles.catLabel, activeCategory === 'all' && { color: '#fff' }]}>All</Text>
+            <Text style={[styles.catFraction, activeCategory === 'all' && { color: 'rgba(255,255,255,0.85)' }]}>
               {achieved}/{total}
             </Text>
             <View style={[styles.catBar, {
-              backgroundColor: activeCategory === 'all' ? 'rgba(255,255,255,0.25)' : '#F0F4F8',
+              backgroundColor: activeCategory === 'all' ? 'rgba(255,255,255,0.22)' : '#EEF2F7',
             }]}>
               <View style={[styles.catBarFill, {
                 width: `${pct}%` as any,
@@ -438,9 +491,11 @@ export default function MilestonesScreen() {
           ))}
         </ScrollView>
 
-        {/* ── Milestone List ──────────────────────────────────────────── */}
+        {/* ── Milestone list ──────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>
-          {activeCategory === 'all' ? 'All Milestones' : CATEGORIES.find(c => c.key === activeCategory)?.label + ' Milestones'}
+          {activeCategory === 'all'
+            ? 'All Milestones'
+            : `${CATEGORIES.find(c => c.key === activeCategory)?.label} Milestones`}
         </Text>
 
         {loading ? (
@@ -450,7 +505,7 @@ export default function MilestonesScreen() {
           </View>
         ) : (
           Object.entries(groups).map(([ageLabel, items]) => {
-            const ageMonths = items[0].ageMonths;
+            const ageMonths    = items[0].ageMonths;
             const isCurrentAge = childAgeMonths !== null &&
               childAgeMonths >= ageMonths - 2 &&
               childAgeMonths <= ageMonths + 2;
@@ -463,11 +518,6 @@ export default function MilestonesScreen() {
                     styles.agePill,
                     isCurrentAge && { backgroundColor: COLORS.primary },
                   ]}>
-                    <Ionicons
-                      name="time-outline"
-                      size={11}
-                      color={isCurrentAge ? '#fff' : '#5C6BC0'}
-                    />
                     <Text style={[styles.ageText, isCurrentAge && { color: '#fff' }]}>
                       {ageLabel}
                     </Text>
@@ -477,13 +527,12 @@ export default function MilestonesScreen() {
                       </View>
                     )}
                   </View>
-                  <View style={styles.ageLine} />
+                  <View style={styles.ageDivider} />
                   <Text style={styles.ageCount}>
                     {items.filter(m => m.status === 'achieved').length}/{items.length}
                   </Text>
                 </View>
 
-                {/* Cards */}
                 {items.map(m => {
                   const catCfg = CATEGORIES.find(c => c.key === m.category)!;
                   return (
@@ -503,9 +552,13 @@ export default function MilestonesScreen() {
 
         {/* Tap hint */}
         <View style={styles.hintCard}>
-          <Ionicons name="finger-print-outline" size={16} color={COLORS.textMuted} />
+          <View style={styles.hintIconRow}>
+            {[ICONS.not_yet, ICONS.in_progress, ICONS.achieved].map((src, i) => (
+              <Image key={i} source={src} style={styles.hintIcon} resizeMode="contain" />
+            ))}
+          </View>
           <Text style={styles.hintText}>
-            Tap any milestone to cycle through: Not Yet → In Progress → Achieved
+            Tap any milestone to cycle: Not Yet → In Progress → Achieved
           </Text>
         </View>
 
@@ -520,186 +573,191 @@ export default function MilestonesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F0F4F8' },
 
-  // Hero
+  // ── Hero ───────────────────────────────────────────────────────────────────
   hero: {
     backgroundColor: COLORS.primary,
-    paddingTop: 56,
+    paddingTop:       Platform.OS === 'ios' ? 58 : 44,
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  heroTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },
-  heroSub:   { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 3 },
+    paddingBottom:    24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    overflow: 'hidden',
+    ...Platform.select({ ios: {
 
-  ringWrap: { alignItems: 'center', justifyContent: 'center' },
-  ring: {
-    width: 62, height: 62,
-    borderRadius: 31,
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.4)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+      ...Platform.select({
+
+        ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16 },
+
+        android: { elevation: 13 },
+
+        default: {},
+
+      }),
+    }, android: { elevation: 10 }}),
   },
-  ringPct:   { fontSize: 16, fontWeight: '800', color: '#fff' },
-  ringLabel: { fontSize: 9,  color: 'rgba(255,255,255,0.8)' },
+  decorCircle1: {
+    position: 'absolute', width: 200, height: 200, borderRadius: 100,
+    borderWidth: 40, borderColor: 'rgba(255,255,255,0.07)', top: -60, right: -60,
+  },
+  decorCircle2: {
+    position: 'absolute', width: 120, height: 120, borderRadius: 60,
+    borderWidth: 24, borderColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 30,
+  },
+
+  heroTop: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    marginBottom: 18,
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#fff',
+    fontFamily: FONTS?.extrabold,
+    letterSpacing: -0.5,
+  },
+  heroSub: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.78)',
+    marginTop: 3,
+    fontFamily: FONTS?.regular,
+  },
+
+  ringOuter: {
+    width: 70, height: 70, borderRadius: 35,
+    borderWidth: 5, borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  ringInner: { alignItems: 'center' },
+  ringPct:   { fontSize: 18, fontWeight: '800', color: '#fff', lineHeight: 22 },
+  ringLabel: { fontSize: 9, color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3 },
 
   heroBar: {
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 3,
-    marginBottom: 10,
-    overflow: 'hidden',
+    height: 6, backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 3, overflow: 'hidden', marginBottom: 14,
   },
   heroBarFill: {
-    height: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 3,
+    height: '100%', backgroundColor: '#fff', borderRadius: 3,
   },
-  heroStats: { flexDirection: 'row', justifyContent: 'space-between' },
-  heroStatText: { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
-  heroStatNum:  { fontWeight: '800', color: '#fff' },
 
-  // Scroll
-  scroll:        { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
-  sectionTitle:  { fontSize: 16, fontWeight: '800', color: '#1A202C', marginBottom: 12 },
-
-  // Category cards
-  catRow: { flexDirection: 'row', gap: 10, paddingBottom: 4, marginBottom: 20 },
-  catCard: {
-    width: 110,
-    borderRadius: 18,
-    padding: 12,
-    borderWidth: 1.5,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  catCardIcon: {
-    width: 38, height: 38,
+  statRow: { flexDirection: 'row', gap: 8 },
+  statPill: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    gap: 5, paddingHorizontal: 10, paddingVertical: 7,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  catEmoji:     { fontSize: 20 },
-  catCardLabel: { fontSize: 12, fontWeight: '800', color: '#1A202C' },
-  catCardPct:   { fontSize: 11, color: '#888', fontWeight: '600' },
-  catBar: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  catBarFill: {
-    height: '100%',
-    borderRadius: 2,
+  statIcon:  { width: 16, height: 16 },
+  statValue: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.7)', flex: 1 },
+
+  // ── Scroll ─────────────────────────────────────────────────────────────────
+  scroll:        { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 22 },
+
+  sectionTitle: {
+    fontSize: 15, fontWeight: '800', color: '#1A202C',
+    marginBottom: 12, fontFamily: FONTS?.extrabold,
+    letterSpacing: -0.2,
   },
 
-  // Age groups
-  ageGroup:  { marginBottom: 24 },
+  // ── Category cards ─────────────────────────────────────────────────────────
+  catRow:    { gap: 10, paddingBottom: 6, marginBottom: 20 },
+  catCard: {
+    width: 112, borderRadius: 20, padding: 12,
+    borderWidth: 1.5, gap: 6,
+    ...Platform.select({ ios: {
+      ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
+    }, android: { elevation: 2 } }),
+  },
+  catIconWrap: {
+    width: 44, height: 44, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  catIcon:     { width: 30, height: 30 },
+  catLabel:    { fontSize: 12, fontWeight: '800', color: '#1A202C' },
+  catFraction: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+  catBar:      { height: 4, borderRadius: 2, overflow: 'hidden' },
+  catBarFill:  { height: '100%', borderRadius: 2 },
+
+  allDots: { flexDirection: 'row', flexWrap: 'wrap', width: 28, gap: 2 },
+  allDotIcon: { width: 11, height: 11 },
+
+  // ── Age groups ─────────────────────────────────────────────────────────────
+  ageGroup:  { marginBottom: 22 },
   ageHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   agePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: '#E8EAF6',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 20, backgroundColor: '#E8EAF6',
   },
   ageText:  { fontSize: 12, fontWeight: '700', color: '#5C6BC0' },
   nowBadge: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    paddingHorizontal: 6, paddingVertical: 1,
     borderRadius: 8,
-    marginLeft: 2,
   },
   nowText:   { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
-  ageLine:   { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
-  ageCount:  { fontSize: 11, fontWeight: '700', color: COLORS.textMuted },
+  ageDivider:{ flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  ageCount:  { fontSize: 11, fontWeight: '700', color: '#94A3B8' },
 
-  // Milestone cards
+  // ── Milestone card ─────────────────────────────────────────────────────────
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 8,
-    borderLeftWidth: 4,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 18,
+    padding: 14, marginBottom: 10,
+    borderLeftWidth: 4, gap: 12,
+    ...Platform.select({ ios: {
+      ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
+    }, android: { elevation: 2 } }),
   },
-  cardAchieved: {
-    backgroundColor: '#F6FFFC',
-  },
+  cardAchieved: { backgroundColor: '#F6FFFC' },
+
   cardIconWrap: {
-    width: 40, height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    width: 46, height: 46, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  cardBody:       { flex: 1 },
-  cardTitleRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
-  cardTitle:      { fontSize: 14, fontWeight: '700', color: '#1A202C', flex: 1 },
-  cardTitleAchieved: { color: '#1D9E75' },
-  achievedEmoji:  { fontSize: 14 },
-  cardDesc:       { fontSize: 12, color: '#718096', lineHeight: 17 },
-  achievedDateRow:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
-  achievedDateText:{ fontSize: 11, color: '#1D9E75', fontWeight: '600' },
-  cardRight:      { flexShrink: 0 },
+  cardIcon: { width: 30, height: 30 },
+
+  cardBody: { flex: 1, gap: 3 },
+  cardTitle: {
+    fontSize: 14, fontWeight: '700', color: '#1A202C',
+    fontFamily: FONTS?.bold,
+  },
+  cardDesc: { fontSize: 12, color: '#718096', lineHeight: 17 },
+
+  achievedRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  tinyIcon:    { width: 12, height: 12 },
+  achievedText:{ fontSize: 11, color: '#1D9E75', fontWeight: '600' },
+
+  cardRight:  { flexShrink: 0 },
   statusBtn: {
-    width: 36, height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5,
   },
+  statusIcon: { width: 24, height: 24 },
 
-  // Loading
-  loadingWrap: { alignItems: 'center', paddingVertical: 40, gap: 10 },
-  loadingText: { color: COLORS.textMuted, fontSize: 13 },
+  // ── Loading ────────────────────────────────────────────────────────────────
+  loadingWrap: { alignItems: 'center', paddingVertical: 48, gap: 12 },
+  loadingText: { color: '#A0AEC0', fontSize: 13 },
 
-  // Empty state
+  // ── Empty state ────────────────────────────────────────────────────────────
   emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 10,
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    padding: 36, gap: 10,
   },
-  emptyEmoji: { fontSize: 56 },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C' },
-  emptySub:   { fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptySub:   { fontSize: 14, color: '#A0AEC0', textAlign: 'center', lineHeight: 20 },
 
-  // Hint
+  // ── Hint card ──────────────────────────────────────────────────────────────
   hintCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#fff', borderRadius: 16,
+    padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: '#E2E8F0',
     borderStyle: 'dashed',
   },
-  hintText: { flex: 1, fontSize: 12, color: COLORS.textMuted, lineHeight: 17 },
+  hintIconRow: { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  hintIcon:    { width: 18, height: 18 },
+  hintText:    { flex: 1, fontSize: 12, color: '#A0AEC0', lineHeight: 17 },
 });

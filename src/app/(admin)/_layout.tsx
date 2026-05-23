@@ -1,4 +1,4 @@
-import { COLORS } from '@/lib/theme';
+﻿import { COLORS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
@@ -39,10 +39,16 @@ export default function AdminLayout() {
           position: 'absolute',
           bottom: 0,
           elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
+
+          ...Platform.select({
+
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
+
+            android: { elevation: 10 },
+
+            default: {},
+
+          }),
         },
         tabBarLabelStyle: {
           fontSize: 11,

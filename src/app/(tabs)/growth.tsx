@@ -10,6 +10,8 @@ import { GrowthRecord, useChildStore } from '@/store/childStore';
 import { Ionicons } from '@expo/vector-icons';
 import GrowthCharts from '@/components/GrowthCharts';
 import { useRouter } from 'expo-router';
+function toTitleCase(str: string): string { return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()); }
+
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -671,7 +673,7 @@ export default function GrowthScreen() {
             />
           </View>
           <View>
-            <Text style={s.heroPillName}>{activeChild.full_name}</Text>
+            <Text style={s.heroPillName}>{toTitleCase(activeChild.full_name)}</Text>
             <Text style={s.heroPillAge}>
               {getAgeMonthsFromDates(activeChild.date_of_birth, new Date())} months old
             </Text>
@@ -792,7 +794,7 @@ export default function GrowthScreen() {
           <GrowthCharts
             records={growthRecords}
             sex={activeChild.sex}
-            childName={activeChild.full_name}
+            childName={toTitleCase(activeChild.full_name)}
           />
         </View>
 
@@ -969,10 +971,16 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.xl,
     padding: 12, alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
+
+    ...Platform.select({
+
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6 },
+
+      android: { elevation: 5 },
+
+      default: {},
+
+    }),
     elevation: 3,
   },
   statIcon: {
@@ -1009,9 +1017,7 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.xl,
     padding: 12, marginBottom: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
     elevation: 3,
   },
 
@@ -1056,9 +1062,7 @@ const s = StyleSheet.create({
     width: 56, height: 56, borderRadius: 28,
     backgroundColor: COLORS.primary,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22, shadowRadius: 10,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }),
     elevation: 6,
   },
   fabNative: { bottom: 158 },
@@ -1103,9 +1107,7 @@ const ab = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.border,
     borderLeftWidth: 4,                           // Rule #9 accent
     padding: 14, marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }),
     elevation: 2,
   },
   headerRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
@@ -1139,9 +1141,7 @@ const rc = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 16, marginBottom: 12,
     borderWidth: 1, borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
     elevation: 3,
   },
   cardLatest: {
@@ -1192,9 +1192,7 @@ const fm = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',                        // Rule #9 — dashed for "add new"
     borderColor: COLORS.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
     elevation: 3,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
@@ -1265,9 +1263,7 @@ const fm = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.lg, padding: 15, marginTop: 18,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8,
+    ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
     elevation: 4,
   },
   submitText: { color: COLORS.onPrimary, fontWeight: '800', fontSize: 15 },

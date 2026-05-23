@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 const supabaseUrl     = process.env.EXPO_PUBLIC_SUPABASE_URL     ?? '';
@@ -17,4 +17,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: Platform.OS === 'web',
     storage:            Platform.OS === 'web' ? webStorage : undefined,
   },
+});
+
+// Silently sign out if the stored refresh token is invalid or expired.
+// Prevents the 'Refresh Token Not Found' error on app launch.
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'TOKEN_REFRESHED') return;
+});
+
+supabase.auth.getSession().then(({ error }) => {
+  if (error?.message?.includes('Refresh Token Not Found') ||
+      error?.message?.includes('Invalid Refresh Token')) {
+    supabase.auth.signOut();
+  }
 });

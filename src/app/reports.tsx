@@ -820,10 +820,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 18,
     padding: 16,
-    shadowColor: '#5B6AF0',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
+
+    ...Platform.select({
+
+      ios: { shadowColor: '#5B6AF0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 10 },
+
+      android: { elevation: 8 },
+
+      default: {},
+
+    }),
     elevation: 3,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
@@ -925,10 +931,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+
+    ...Platform.select({
+
+      ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+
+      android: { elevation: 8 },
+
+      default: {},
+
+    }),
     elevation: 6,
   },
   exportCtaText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },

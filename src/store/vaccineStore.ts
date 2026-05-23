@@ -41,6 +41,7 @@ export interface Immunization {
   facility: string | null;
   status: 'scheduled' | 'given' | 'missed';
   notes: string | null;
+  dose_number: number | null;
 }
 
 export type VaccineStatus = 'given' | 'missed' | 'due' | 'upcoming';

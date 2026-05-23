@@ -3,6 +3,8 @@ import { useChildStore } from '@/store/childStore';
 import { useVaccineStore, VaccineRow, VaccineStatus } from '@/store/vaccineStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+function toTitleCase(str: string): string { return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()); }
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -651,7 +653,7 @@ export default function VaccinesScreen() {
             <Text style={{ fontSize: 18 }}>{isFemale ? '👧' : '👦'}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.childName}>{activeChild.full_name}</Text>
+            <Text style={s.childName}>{toTitleCase(activeChild.full_name)}</Text>
             <Text style={s.childDob}>Born {formatDate(activeChild.date_of_birth)}</Text>
           </View>
           <CircleProgress given={counts.given} total={vaccineRows.length} />
@@ -774,8 +776,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#208AEF', borderRadius: 16,
     paddingHorizontal: 28, paddingVertical: 15,
-    shadowColor: '#208AEF', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    ...Platform.select({ ios: { shadowColor: '#208AEF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }), elevation: 6,
   },
   goBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
@@ -841,8 +842,7 @@ const s = StyleSheet.create({
   statCard: {
     flex: 1, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 6,
     alignItems: 'center', borderWidth: 1.5,
-    shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    ...Platform.select({ ios: { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }), elevation: 2,
   },
   statIconWrap: {
     width: 32, height: 32, borderRadius: 10,
@@ -897,10 +897,16 @@ const vc = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 12,
     overflow: 'hidden',
-    shadowColor: '#1A3A6B',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+
+    ...Platform.select({
+
+      ios: { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10 },
+
+      android: { elevation: 8 },
+
+      default: {},
+
+    }),
     elevation: 3,
   },
   accentBar: { width: 5 },
@@ -959,8 +965,7 @@ const vc = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6,
     borderRadius: 12, paddingVertical: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12, shadowRadius: 4, elevation: 2,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 }, android: { elevation: 6 }, default: {} }), elevation: 2,
   },
   primaryBtnText: { fontSize: 13, fontWeight: '800', color: '#fff' },
   secondaryBtn: {
@@ -984,8 +989,7 @@ const fb = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
     paddingVertical: 12,
-    shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    ...Platform.select({ ios: { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 }, android: { elevation: 6 }, default: {} }), elevation: 1,
   },
   row: { paddingHorizontal: 16, gap: 8, flexDirection: 'row', alignItems: 'center' },
   chip: {
@@ -1075,8 +1079,7 @@ const mds = StyleSheet.create({
   iconCircle: {
     width: 48, height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 }, android: { elevation: 6 }, default: {} }), elevation: 3,
   },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   heroEmoji: { fontSize: 16 },
@@ -1134,8 +1137,7 @@ const mds = StyleSheet.create({
     flex: 2, borderRadius: 14, paddingVertical: 16,
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 4,
   },
   confirmText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });

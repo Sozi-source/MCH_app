@@ -3,22 +3,36 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useChildStore } from '@/store/childStore';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '@/lib/theme';
 import { setupNotifications, registerTapHandler } from '@/lib/notificationService';
 
+SplashScreen.preventAutoHideAsync();
+
 // Screens where the FAB should NOT appear
 const FAB_HIDDEN_SEGMENTS = ['(auth)', '(admin)'];
+const FAB_HIDDEN_SCREENS  = ['chat', 'vaccines', 'milestones', 'growth'];
 
 function ZuriFAB() {
-  const router = useRouter();
+  const router   = useRouter();
   const segments = useSegments();
+  const segs     = segments as string[];
+  const currentGroup  = segs[0] ?? '';
+  const currentScreen = segs[1] ?? '';
 
-  const currentGroup = segments[0] as string;
-  if (FAB_HIDDEN_SEGMENTS.includes(currentGroup)) return null;
+  if (FAB_HIDDEN_SEGMENTS.includes(currentGroup))  return null;
+  if (FAB_HIDDEN_SCREENS.includes(currentScreen))  return null;
 
   return (
     <TouchableOpacity
@@ -34,8 +48,24 @@ function ZuriFAB() {
 export default function RootLayout() {
   const { session, hydrated, setSession, setHydrated } = useAuthStore();
   const { fetchChildren } = useChildStore();
-  const router = useRouter();
+  const router   = useRouter();
   const segments = useSegments();
+
+  const [fontTimeout, setFontTimeout] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setFontTimeout(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontTimeout) SplashScreen.hideAsync();
+  }, [fontsLoaded, fontTimeout]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -52,7 +82,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const inAuthGroup = (segments[0] as string) === '(auth)';
+    const segs        = segments as string[];
+    const inAuthGroup = (segs[0] ?? '') === '(auth)';
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login' as any);
     } else if (session && inAuthGroup) {
@@ -67,6 +98,8 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
+  if (!fontsLoaded && !fontTimeout) return null;
+
   return (
     <>
       <StatusBar style="auto" />
@@ -76,6 +109,8 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(admin)" />
         <Stack.Screen name="children" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="write-review" />
       </Stack>
 
       {/* Floating Zuri AI button — visible on all user screens */}
@@ -103,10 +138,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 6,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+
+    ...Platform.select({
+
+      ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+
+      android: { elevation: 6 },
+
+      default: {},
+
+    }),
     zIndex: 999,
   },
   loadingOverlay: {

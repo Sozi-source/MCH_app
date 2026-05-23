@@ -2,6 +2,7 @@
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions,
   ScrollView, Modal, Pressable, Animated,
+  Platform,
 } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
@@ -519,7 +520,7 @@ const styles = StyleSheet.create({
   tab:              { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1.5, borderColor: '#E5E7EB' },
   tabText:          { fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
   tabTextActive:    { color: '#fff' },
-  chartCard:        { backgroundColor: '#fff', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  chartCard:        { backgroundColor: '#fff', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 8, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 3 },
   chartHeader:      { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   chartIconBadge:   { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   chartTitle:       { fontSize: 14, fontWeight: '700', color: '#111827' },
@@ -546,7 +547,7 @@ const styles = StyleSheet.create({
 
 const tt = StyleSheet.create({
   backdrop:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  card:        { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 10 },
+  card:        { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '100%', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24 }, android: { elevation: 6 }, default: {} }), elevation: 10 },
   header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   title:       { fontSize: 15, fontWeight: '700', color: '#111827' },
   closeBtn:    { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },

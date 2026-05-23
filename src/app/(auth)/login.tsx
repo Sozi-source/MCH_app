@@ -1,7 +1,7 @@
 ﻿/**
  * ZuriHealth — Premium Login Screen
  * Theme: App's native blue palette (#208AEF primary)
- * Aesthetic: Clean tech-health — sky blue depth, white card, crisp typography
+ * Aesthetic: Clean tech-health — hero photo + blue overlay, white card, crisp typography
  */
 
 import { supabase } from '@/lib/supabase';
@@ -13,6 +13,8 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Image,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -24,33 +26,6 @@ import {
 } from 'react-native';
 
 const { width: W, height: H } = Dimensions.get('window');
-
-// ─── Animated background orb ──────────────────────────────────────────────────
-function BluOrb({ size, opacity, style }: { size: number; opacity: number; style?: any }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.1, duration: 4000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1,   duration: 4000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-  return (
-    <Animated.View
-      style={[
-        {
-          width: size, height: size, borderRadius: size / 2,
-          backgroundColor: COLORS.primary,
-          opacity,
-          transform: [{ scale: pulse }],
-          position: 'absolute',
-        },
-        style,
-      ]}
-    />
-  );
-}
 
 // ─── Stagger-in hook ──────────────────────────────────────────────────────────
 function useStaggerIn(count: number, delay = 90) {
@@ -183,35 +158,23 @@ export default function LoginScreen() {
       style={s.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* ── Blue depth background ── */}
-      <View style={s.bg}>
-        <BluOrb size={340} opacity={0.22} style={{ top: -120, right: -100 }} />
-        <BluOrb size={200} opacity={0.13} style={{ top: 180,  left: -80  }} />
-        <BluOrb size={130} opacity={0.08} style={{ top: 80,   right: 60  }} />
-
-        {/* Grid lines for tech feel */}
-        <View style={s.gridLine1} />
-        <View style={s.gridLine2} />
-        <View style={s.gridLine3} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      {/* ── Hero Image Section ── */}
+      <ImageBackground
+        source={require('@/assets/images/hero.jpg')}
+        style={s.heroBg}
+        resizeMode="cover"
       >
-        {/* ── Hero ── */}
+        {/* Blue overlay so text stays readable */}
+        <View style={s.heroOverlay} />
+
+        {/* Logo + app name on top of photo */}
         <View style={s.hero}>
-          {/* Logo mark */}
           <Animated.View style={[s.logoWrap, anims[0]]}>
-            {/* Outer frosted ring */}
             <View style={s.logoRing}>
-              {/* Inner square */}
               <View style={s.logoSquare}>
-                <Ionicons name="heart" size={26} color={COLORS.white} />
+                <Ionicons name="heart" size={26} color={COLORS.primary} />
               </View>
             </View>
-            {/* Pulse ring */}
             <View style={s.logoPulse} />
           </Animated.View>
 
@@ -222,8 +185,14 @@ export default function LoginScreen() {
             <View style={s.taglineDot} />
           </Animated.View>
         </View>
+      </ImageBackground>
 
-        {/* ── White card ── */}
+      {/* ── White card ── */}
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.card}>
           {/* Top accent bar */}
           <View style={s.cardAccentRow}>
@@ -326,65 +295,64 @@ export default function LoginScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.primary },
-  bg:   { ...StyleSheet.absoluteFillObject },
 
-  // Grid decoration lines
-  gridLine1: { position: 'absolute', top: H * 0.12, left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
-  gridLine2: { position: 'absolute', top: H * 0.22, left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.04)' },
-  gridLine3: { position: 'absolute', top: 0, bottom: 0, left: W * 0.72, width: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
-
-  scroll: { flexGrow: 1, paddingBottom: 32 },
-
-  // Hero
+  // Hero image
+  heroBg: {
+    width: W,
+    height: H * 0.44,
+    justifyContent: 'flex-end',
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(18, 81, 163, 0.52)',
+  },
   hero: {
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 84 : 68,
-    paddingBottom: 40,
+    paddingBottom: 36,
     paddingHorizontal: 24,
   },
-  logoWrap:   { marginBottom: 22, alignItems: 'center', justifyContent: 'center' },
-  logoRing:   {
-    width: 80, height: 80, borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)',
+
+  logoWrap: { marginBottom: 16, alignItems: 'center', justifyContent: 'center' },
+  logoRing: {
+    width: 72, height: 72, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
     alignItems: 'center', justifyContent: 'center',
   },
   logoSquare: {
-    width: 56, height: 56, borderRadius: 18,
+    width: 50, height: 50, borderRadius: 16,
     backgroundColor: COLORS.white,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4, shadowRadius: 14, elevation: 10,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }), elevation: 8,
   },
   logoPulse: {
-    position: 'absolute', width: 96, height: 96,
-    borderRadius: 28, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    position: 'absolute', width: 88, height: 88,
+    borderRadius: 26, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
-
   appName: {
-    fontSize: 40, fontWeight: '800', color: COLORS.white,
-    letterSpacing: -1.5, marginBottom: 10,
+    fontSize: 36, fontWeight: '800', color: COLORS.white,
+    letterSpacing: -1.2, marginBottom: 8,
   },
-  taglineRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-  },
+  taglineRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   taglineDot: {
     width: 4, height: 4, borderRadius: 2,
-    backgroundColor: COLORS.primaryMid, opacity: 0.8,
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
   tagline: {
-    fontSize: 13, color: COLORS.primaryMid, letterSpacing: 0.4,
-    fontStyle: 'italic', fontWeight: '500',
+    fontSize: 13, color: 'rgba(255,255,255,0.88)',
+    letterSpacing: 0.4, fontStyle: 'italic', fontWeight: '500',
   },
 
-  // Card
+  scroll: { flexGrow: 1 },
+
+  // Card — sits flush below the image
   card: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 36, borderTopRightRadius: 36,
-    flex: 1, minHeight: H * 0.62,
+    flex: 1, minHeight: H * 0.6,
     paddingHorizontal: 28, paddingTop: 0, paddingBottom: 36,
+    marginTop: -24,
     overflow: 'hidden',
   },
   cardAccentRow: {
@@ -392,9 +360,7 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     marginTop: 20, marginBottom: 28,
   },
-  accentBar: {
-    height: 4, borderRadius: 2, backgroundColor: COLORS.primary,
-  },
+  accentBar: { height: 4, borderRadius: 2, backgroundColor: COLORS.primary },
   cardTitle: {
     fontSize: 26, fontWeight: '800',
     color: COLORS.textPrimary, letterSpacing: -0.8, marginBottom: 4,
@@ -413,37 +379,30 @@ const s = StyleSheet.create({
   },
   errorText: { flex: 1, color: COLORS.missed, fontSize: 13, fontWeight: '500' },
 
-  // Forgot
-  forgotWrap:  { alignSelf: 'flex-end', marginTop: -4, marginBottom: 24 },
-  forgotText:  { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
+  forgotWrap: { alignSelf: 'flex-end', marginTop: -4, marginBottom: 24 },
+  forgotText: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
 
-  // Sign in button
   btn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.xl, paddingVertical: 16,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+    ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14 }, android: { elevation: 6 }, default: {} }), elevation: 8,
   },
   btnLoading:  { backgroundColor: COLORS.primaryMid },
   btnInner:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
   btnText:     { fontSize: 16, fontWeight: '700', color: COLORS.white, letterSpacing: 0.2 },
   loadingDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.white, opacity: 0.7 },
 
-  // Divider
   divider:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
   dividerText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '500' },
 
-  // Register
   registerBtn: {
     borderWidth: 1.5, borderColor: COLORS.primary,
     borderRadius: RADIUS.xl, paddingVertical: 14,
     alignItems: 'center',
   },
   registerText: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
-
   footerNote: {
     textAlign: 'center', marginTop: 24,
     fontSize: 12, color: COLORS.textMuted,

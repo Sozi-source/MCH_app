@@ -32,6 +32,17 @@ export const RADIUS = {
   full: 9999,
 };
 
+// ─── Typography ───────────────────────────────────────────────────────────────
+// Import the font family names from @expo-google-fonts/plus-jakarta-sans
+// Usage: fontFamily: FONTS.bold
+
+export const FONTS = {
+  regular:  'PlusJakartaSans_400Regular',
+  semibold: 'PlusJakartaSans_600SemiBold',
+  bold:     'PlusJakartaSans_700Bold',
+  extrabold:'PlusJakartaSans_800ExtraBold',
+};
+
 // ─── Shared Header Constants ──────────────────────────────────────────────────
 // Single source of truth for every screen's hero header.
 // Usage: import { HEADER } from '@/lib/theme'

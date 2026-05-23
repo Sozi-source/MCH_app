@@ -1,4 +1,4 @@
-﻿{
+{
   "expo": {
     "name": "ZuriHealth",
     "slug": "mamaTOTO",
@@ -44,7 +44,8 @@
           "enableBackgroundRemoteNotifications": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": false,
@@ -57,4 +58,3 @@
     }
   }
 }
-

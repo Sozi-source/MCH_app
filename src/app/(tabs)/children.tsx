@@ -1,4 +1,6 @@
-﻿// src/app/(tabs)/children.tsx
+﻿function toTitleCase(str: string): string { return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase()); }
+
+// src/app/(tabs)/children.tsx
 import { useT } from '@/hooks/useT';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -148,7 +150,7 @@ function ChildCard({
       <View style={styles.cardBody}>
         {/* Name + active pill */}
         <View style={styles.cardNameRow}>
-          <Text style={styles.cardName} numberOfLines={1}>{item.full_name}</Text>
+          <Text style={styles.cardName} numberOfLines={1}>{toTitleCase(item.full_name)}</Text>
           {isSelected && <ActivePill />}
         </View>
 
@@ -355,7 +357,18 @@ export default function ChildrenScreen() {
           ) : null
         }
         ListEmptyComponent={<EmptyState onAdd={() => router.push('/children/add')} />}
-        ListFooterComponent={<View style={{ height: 140 }} />}
+        ListFooterComponent={<>
+          <View style={styles.tipCard}>
+            <View style={styles.tipAccent} />
+            <View style={{ flex: 1, padding: 12 }}>
+              <Text style={styles.tipTitle}>💡 Did you know?</Text>
+              <Text style={styles.tipBody}>
+                Regular growth monitoring helps detect malnutrition early. WHO recommends monthly check-ups for children under 2 years.
+              </Text>
+            </View>
+          </View>
+          <View style={{ height: 140 }} />
+        </>}
       />
 
       {/* ── FAB ── */}
@@ -387,10 +400,16 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 20,
     overflow: 'hidden',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
+
+    ...Platform.select({
+
+      ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16 },
+
+      android: { elevation: 13 },
+
+      default: {},
+
+    }),
     elevation: 8,
   },
   headerDecorCircle: {
@@ -428,8 +447,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 18,
     padding: 14, borderWidth: 1.5, borderColor: COLORS.border, gap: 12,
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 3,
   },
   cardActive: {
     borderColor: COLORS.primary, borderWidth: 2,
@@ -488,11 +506,25 @@ const styles = StyleSheet.create({
   emptyHintRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: 12, borderWidth: 1, borderColor: COLORS.border, elevation: 1 },
   emptyHintIcon:  { width: 34, height: 34, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
   emptyHintText:  { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
-  emptyBtn:       { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 15, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', gap: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.30, shadowRadius: 8, elevation: 6 },
+  emptyBtn:       { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 15, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', gap: 8, ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.30, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 6 },
   emptyBtnText:   { color: COLORS.onPrimary, fontWeight: '700', fontSize: 15 },
 
   // FAB
-  fab:       { position: 'absolute', width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', right: 20, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 8 },
+  fab:       { position: 'absolute', width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', right: 20, ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }), elevation: 8 },
   fabNative: { bottom: 158 },
   fabWeb:    { bottom: 76 },
+
+  tipCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  tipAccent: { width: 4, backgroundColor: '#208AEF' },
+  tipTitle: { fontSize: 13, fontWeight: '800', color: '#208AEF', marginBottom: 4 },
+  tipBody: { fontSize: 12, color: '#64748B', lineHeight: 18 },
 });

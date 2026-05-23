@@ -342,20 +342,7 @@ export default function SettingsScreen() {
               </View>
             }
           />
-          <SettingsRow
-            icon="download-outline"
-            iconBg="#EEEDFB"
-            iconColor={COLORS.upcoming}
-            title="Export Data"
-            sub="Download your child's health records"
-            onPress={() => router.push('/export' as any)}
-            isLast
-            right={
-              <View style={s.chevronCircle}>
-                <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
-              </View>
-            }
-          />
+
         </View>
 
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -401,6 +388,19 @@ export default function SettingsScreen() {
             }
           />
           <SettingsRow
+            icon="star-outline"
+            iconBg="#FFF8E6"
+            iconColor="#F59E0B"
+            title="Rate & Reviews"
+            sub="Share your experience with mamaTOTO"
+            onPress={() => router.push('/(tabs)/reviews' as any)}
+            right={
+              <View style={s.chevronCircle}>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+              </View>
+            }
+          />
+          <SettingsRow
             icon="help-circle-outline"
             iconBg="#FFF8E6"
             iconColor={COLORS.due}
@@ -419,17 +419,7 @@ export default function SettingsScreen() {
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             ACCOUNT
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <SectionLabel label="ACCOUNT" emoji="👤" />
-        <View style={s.card}>
-          <SettingsRow
-            icon="person-outline"
-            iconBg={COLORS.primaryLight}
-            iconColor={COLORS.primary}
-            title="Signed in as"
-            sub={user?.email ?? '—'}
-            isLast
-          />
-        </View>
+
 
         {/* Sign out button */}
         <TouchableOpacity
@@ -553,9 +543,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderWidth: 1, borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }),
     elevation: 3,
   },
 
@@ -605,9 +593,7 @@ const s = StyleSheet.create({
     marginTop: 10, marginBottom: 2,
     overflow: 'hidden',
     borderWidth: 1, borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }),
     elevation: 2,
   },
   tipAccent: { width: 4, backgroundColor: COLORS.primary },
@@ -620,9 +606,7 @@ const s = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 20, marginBottom: 10,
     overflow: 'hidden',
-    shadowColor: COLORS.given,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 10,
+    ...Platform.select({ ios: { shadowColor: COLORS.given, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }),
     elevation: 5,
   },
   aboutDecorCircle: {
@@ -663,9 +647,7 @@ const s = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 16, marginTop: 8,
     borderWidth: 1.5, borderColor: '#F5C2C0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }),
     elevation: 2,
   },
   signOutIconCircle: {

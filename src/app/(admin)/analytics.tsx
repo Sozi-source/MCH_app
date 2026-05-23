@@ -15,6 +15,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -150,7 +151,7 @@ export default function AnalyticsScreen() {
 
       const registrations: RegistrationPoint[] = months.map(m => ({
         label: monthLabel(m),
-        count: (allParents ?? []).filter(p =>
+        count: (allParents ?? []).filter((p: any) =>
           p.created_at?.slice(0, 7) === m
         ).length,
       }));
@@ -169,7 +170,7 @@ export default function AnalyticsScreen() {
 
       // Count per child, then join children→parents
       const childCounts: Record<string, number> = {};
-      (growthRaw ?? []).forEach(g => {
+      (growthRaw ?? []).forEach((g: any) => {
         childCounts[g.child_id] = (childCounts[g.child_id] ?? 0) + 1;
       });
 
@@ -185,19 +186,19 @@ export default function AnalyticsScreen() {
           .select('id, parent_id')
           .in('id', topChildIds);
 
-        const parentIds = [...new Set((childRows ?? []).map(c => c.parent_id))];
+        const parentIds = [...new Set((childRows ?? []).map((c: any) => c.parent_id))];
         const { data: parentRows } = await supabase
           .from('parents')
           .select('id, full_name, email')
           .in('id', parentIds);
 
-        activeUsers = (parentRows ?? []).map(p => {
+        activeUsers = (parentRows ?? []).map((p: any) => {
           const childrenOfParent = (childRows ?? [])
-            .filter(c => c.parent_id === p.id)
-            .map(c => c.id);
-          const count = childrenOfParent.reduce((sum, cid) => sum + (childCounts[cid] ?? 0), 0);
+            .filter((c: any) => c.parent_id === p.id)
+            .map((c: any) => c.id);
+          const count = childrenOfParent.reduce((sum: number, cid: any) => sum + (childCounts[cid] ?? 0), 0);
           return { full_name: p.full_name, email: p.email, record_count: count };
-        }).sort((a, b) => b.record_count - a.record_count);
+        }).sort((a: any, b: any) => b.record_count - a.record_count);
       }
 
       // 4. Growth records per week
@@ -207,7 +208,7 @@ export default function AnalyticsScreen() {
 
       const growthWeekly: GrowthPoint[] = weeks.map(w => ({
         label: w.label,
-        count: (growthAll ?? []).filter(g => {
+        count: (growthAll ?? []).filter((g: any) => {
           const d = g.created_at?.slice(0, 10) ?? '';
           return d >= w.start && d <= w.end;
         }).length,
@@ -224,9 +225,9 @@ export default function AnalyticsScreen() {
         .select('status');
 
       const vaccineStats: VaccineStats = {
-        completed: (vaccines ?? []).filter(v => v.status === 'given').length,
-        pending:   (vaccines ?? []).filter(v => v.status === 'pending' || v.status === 'due').length,
-        missed:    (vaccines ?? []).filter(v => v.status === 'missed' || v.status === 'overdue').length,
+        completed: (vaccines ?? []).filter((v: any) => v.status === 'given').length,
+        pending:   (vaccines ?? []).filter((v: any) => v.status === 'pending' || v.status === 'due').length,
+        missed:    (vaccines ?? []).filter((v: any) => v.status === 'missed' || v.status === 'overdue').length,
       };
 
       setData({
@@ -405,10 +406,16 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+
+    ...Platform.select({
+
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+
+      android: { elevation: 3 },
+
+      default: {},
+
+    }),
     elevation: 2,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },

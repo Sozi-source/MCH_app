@@ -1,5 +1,19 @@
+﻿/**
+ * src/app/(tabs)/nutrition.tsx
+ * ─────────────────────────────────────────────────────────────
+ * mamaTOTO — Nutrition Screen (Age-Gated)
+ *
+ * Reads child age and auto-renders the appropriate content:
+ *   0–5 months   → Exclusive breastfeeding support only
+ *   6–11 months  → Introduction: feeding stage + food groups + meals
+ *   12–23 months → Full screen: MDD + all sections
+ *   24+ months   → Family foods: simplified, no MDD bar
+ * ─────────────────────────────────────────────────────────────
+ */
+
 import { COLORS, RADIUS } from '@/lib/theme';
-import { getFeedingStage, FOOD_GROUPS, getTipsForAge, getMDDStatus } from '@/lib/nutritionData';
+import { computeMDDStatus, FoodGroup } from '@/lib/nutritionService';
+import { useFeedingStage, useNutritionTips, useFoodGroups } from '@/hooks/useNutrition';
 import { askGroq } from '@/lib/zscore';
 import { useChildStore } from '@/store/childStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +24,7 @@ import {
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────
 
 function getAgeMonths(dob: string): number {
   const d = new Date(dob);
@@ -18,126 +32,157 @@ function getAgeMonths(dob: string): number {
   return Math.max(0, (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth()));
 }
 
-// ─── Feeding Stage Card ───────────────────────────────────────────────────────
+type AgePhase = 'exclusive' | 'introduction' | 'full' | 'family';
 
-function FeedingStageCard({ ageMonths }: { ageMonths: number }) {
-  const stage = getFeedingStage(ageMonths);
-  const [expanded, setExpanded] = useState(false);
+function getAgePhase(ageMonths: number): AgePhase {
+  if (ageMonths < 6) return 'exclusive';
+  if (ageMonths < 12) return 'introduction';
+  if (ageMonths < 24) return 'full';
+  return 'family';
+}
+
+// ─── Phase: Exclusive Breastfeeding (0–5 months) ──────────────
+
+function ExclusiveBreastfeedingScreen({ ageMonths }: { ageMonths: number }) {
+  const { data: tips = [], isLoading } = useNutritionTips(ageMonths);
+  const [tipIndex, setTipIndex] = useState(0);
+
+  useEffect(() => {
+    if (tips.length === 0) return;
+    const t = setInterval(() => setTipIndex(i => (i + 1) % tips.length), 9000);
+    return () => clearInterval(t);
+  }, [tips.length]);
 
   return (
-    <View style={sc.card}>
-      {/* Decorative overlay circle */}
-      <View style={sc.decorCircle} />
-
-      <View style={sc.topRow}>
-        <View style={sc.iconSquare}>
-          <Ionicons name="leaf" size={16} color="#FFFFFF" />
+    <View style={excl.container}>
+      {/* Hero card */}
+      <View style={excl.heroCard}>
+        <View style={excl.heroIconWrap}>
+          <Ionicons name="heart" size={36} color={COLORS.primary} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={sc.stageName}>{stage.stage}</Text>
-          <View style={sc.sourceTag}>
-            <Ionicons name="shield-checkmark" size={10} color="#2A9D6E" />
-            <Text style={sc.sourceTagText}>WHO Verified · {stage.source}</Text>
+        <Text style={excl.heroTitle}>Exclusive Breastfeeding</Text>
+        <Text style={excl.heroAge}>{ageMonths} month{ageMonths !== 1 ? 's' : ''} old</Text>
+        <Text style={excl.heroBody}>
+          Breast milk alone provides everything your baby needs right now — the perfect
+          balance of nutrients, antibodies, and hydration. No water, formula, or other
+          foods are needed.
+        </Text>
+        <View style={excl.heroBadge}>
+          <Ionicons name="shield-checkmark-outline" size={11} color="#2A9D6E" />
+          <Text style={excl.heroBadgeText}>WHO IYCF Guidelines, 2003 · Kenya MCH Handbook, 2022</Text>
+        </View>
+      </View>
+
+      {/* Key guidance cards */}
+      <View style={excl.guidanceGrid}>
+        {[
+          {
+            icon: 'time-outline' as const,
+            title: 'Feed on demand',
+            body: 'Breastfeed whenever your baby shows hunger cues — at least 8–12 times in 24 hours.',
+            color: '#1A6BB5',
+          },
+          {
+            icon: 'water-outline' as const,
+            title: 'No other liquids',
+            body: 'Water, juice, tea, and formula are not needed and can reduce milk supply.',
+            color: '#E67E22',
+          },
+          {
+            icon: 'sunny-outline' as const,
+            title: 'Vitamin D',
+            body: 'A daily Vitamin D supplement (400 IU) is recommended, especially for indoor babies.',
+            color: '#2A9D6E',
+          },
+          {
+            icon: 'calendar-outline' as const,
+            title: 'Continue until 6 months',
+            body: 'Solid foods should only begin at exactly 6 months of age (180 days), not before.',
+            color: '#7B5EA7',
+          },
+        ].map(card => (
+          <View key={card.title} style={excl.guidanceCard}>
+            <View style={[excl.guidanceIcon, { backgroundColor: card.color + '18' }]}>
+              <Ionicons name={card.icon} size={18} color={card.color} />
+            </View>
+            <Text style={excl.guidanceTitle}>{card.title}</Text>
+            <Text style={excl.guidanceBody}>{card.body}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Rotating tips */}
+      {!isLoading && tips.length > 0 && (
+        <View style={excl.tipCard}>
+          <View style={excl.tipPill}>
+            <Ionicons name="bulb-outline" size={12} color="#FFFFFF" />
+            <Text style={excl.tipPillText}>BREASTFEEDING TIP</Text>
+          </View>
+          <Text style={excl.tipText}>{tips[tipIndex].tip}</Text>
+          <View style={excl.tipFooter}>
+            <Ionicons name="shield-checkmark-outline" size={11} color="rgba(255,255,255,0.6)" />
+            <Text style={excl.tipSource}>{tips[tipIndex].source} · {tips[tipIndex].source}</Text>
+            {tips.length > 1 && (
+              <View style={excl.tipDots}>
+                {tips.map((_, i) => (
+                  <View key={i} style={[excl.tipDot, i === tipIndex && excl.tipDotActive]} />
+                ))}
+              </View>
+            )}
           </View>
         </View>
-      </View>
-
-      {/* Stats grid */}
-      <View style={sc.grid}>
-        <View style={sc.gridItem}>
-          <Text style={sc.gridEmoji}>🍽️</Text>
-          <Text style={sc.gridValue}>{stage.mealsPerDay}</Text>
-          <Text style={sc.gridLabel}>Meals / day</Text>
-        </View>
-        <View style={sc.gridDivider} />
-        <View style={sc.gridItem}>
-          <Text style={sc.gridEmoji}>🍎</Text>
-          <Text style={sc.gridValue}>{stage.snacksPerDay}</Text>
-          <Text style={sc.gridLabel}>Snacks</Text>
-        </View>
-        <View style={sc.gridDivider} />
-        <View style={sc.gridItem}>
-          <Text style={sc.gridEmoji}>🥄</Text>
-          <Text style={sc.gridValue}>{stage.amountPerMeal}</Text>
-          <Text style={sc.gridLabel}>Per meal</Text>
-        </View>
-        <View style={sc.gridDivider} />
-        <View style={sc.gridItem}>
-          <Text style={sc.gridEmoji}>✋</Text>
-          <Text style={sc.gridValue}>{stage.texture}</Text>
-          <Text style={sc.gridLabel}>Texture</Text>
-        </View>
-      </View>
-
-      {/* Breastfeeding row */}
-      <View style={sc.bfRow}>
-        <View style={sc.bfIconCircle}>
-          <Ionicons name="heart" size={12} color={COLORS.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={sc.bfLabel}>Breastfeeding</Text>
-          <Text style={sc.bfValue}>{stage.breastfeeding}</Text>
-        </View>
-      </View>
-
-      {/* Expand key facts */}
-      <TouchableOpacity style={sc.expandBtn} onPress={() => setExpanded(e => !e)} activeOpacity={0.7}>
-        <Text style={sc.expandBtnText}>
-          {expanded ? 'Hide key facts' : `${stage.keyFacts.length} key facts for this stage`}
-        </Text>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={COLORS.primary} />
-      </TouchableOpacity>
-
-      {expanded && (
-        <View style={sc.factsContainer}>
-          {stage.keyFacts.map((fact, i) => (
-            <View key={i} style={sc.factRow}>
-              <View style={sc.factDot}>
-                <Ionicons name="checkmark" size={10} color="#FFFFFF" />
-              </View>
-              <Text style={sc.factText}>{fact}</Text>
-            </View>
-          ))}
-        </View>
       )}
+
+      {/* Next milestone */}
+      <View style={excl.milestoneCard}>
+        <Ionicons name="flag-outline" size={16} color="#7B5EA7" />
+        <View style={{ flex: 1 }}>
+          <Text style={excl.milestoneTitle}>Next milestone: {6 - ageMonths} month{(6 - ageMonths) !== 1 ? 's' : ''} away</Text>
+          <Text style={excl.milestoneBody}>
+            At 6 months you'll start complementary feeding — soft, mashed foods alongside
+            continued breastfeeding. We'll guide you through every step.
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }
 
-// ─── Rotating IYCF Tip Card ───────────────────────────────────────────────────
+// ─── Rotating Tip Banner (6+ months) ──────────────────────────
 
-function TipCard({ ageMonths }: { ageMonths: number }) {
-  const tips = useMemo(() => getTipsForAge(ageMonths), [ageMonths]);
+function TipBanner({ ageMonths }: { ageMonths: number }) {
+  const { data: tips = [], isLoading } = useNutritionTips(ageMonths);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     if (tips.length === 0) return;
-    const interval = setInterval(() => setIndex(i => (i + 1) % tips.length), 8000);
-    return () => clearInterval(interval);
+    const t = setInterval(() => setIndex(i => (i + 1) % tips.length), 9000);
+    return () => clearInterval(t);
   }, [tips.length]);
 
+  if (isLoading) return (
+    <View style={tb.skeleton}>
+      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+    </View>
+  );
   if (tips.length === 0) return null;
+
   const tip = tips[index];
 
   return (
-    <View style={tc.card}>
-      <View style={tc.decorCircle} />
-      <View style={tc.leftCol}>
-        <View style={tc.iconCircle}>
-          <Ionicons name="bulb" size={16} color="#FFFFFF" />
-        </View>
-        <Text style={tc.label}>TIP</Text>
+    <View style={tb.card}>
+      <View style={tb.pill}>
+        <Ionicons name="bulb-outline" size={12} color="#FFFFFF" />
+        <Text style={tb.pillText}>IYCF TIP</Text>
       </View>
-      <View style={{ flex: 1 }}>
-        <Text style={tc.tip}>{tip.tip}</Text>
-        <View style={tc.sourceRow}>
-          <Ionicons name="shield-checkmark" size={10} color="#2A9D6E" />
-          <Text style={tc.source}>{tip.source}</Text>
-        </View>
+      <Text style={tb.text}>{tip.tip}</Text>
+      <View style={tb.footer}>
+        <Ionicons name="shield-checkmark-outline" size={11} color="rgba(255,255,255,0.6)" />
+        <Text style={tb.source}>{tip.source} · {tip.source}</Text>
         {tips.length > 1 && (
-          <View style={tc.dotsRow}>
+          <View style={tb.dots}>
             {tips.map((_, i) => (
-              <View key={i} style={[tc.dot, i === index && tc.dotActive]} />
+              <View key={i} style={[tb.dot, i === index && tb.dotActive]} />
             ))}
           </View>
         )}
@@ -146,153 +191,135 @@ function TipCard({ ageMonths }: { ageMonths: number }) {
   );
 }
 
-// ─── AI Meal Suggestion Card ──────────────────────────────────────────────────
+// ─── Feeding Stage Card ────────────────────────────────────────
 
-function AICard({ content, loading, onRefresh }: {
-  content: string; loading: boolean; onRefresh: () => void;
-}) {
+function FeedingStageCard({ ageMonths }: { ageMonths: number }) {
+  const { data: stage, isLoading } = useFeedingStage(ageMonths);
+  const [expanded, setExpanded] = useState(false);
+
+  if (isLoading) return <SkeletonCard height={160} />;
+  if (!stage) return null;
+
+  const stats = [
+    { label: 'Meals/day', value: stage.meals_per_day },
+    { label: 'Snacks', value: stage.snacks_per_day },
+    { label: 'Per meal', value: stage.amount_per_meal },
+    { label: 'Texture', value: stage.texture },
+  ];
+
   return (
-    <View style={ai.card}>
-      <View style={ai.decorCircle} />
-      <View style={ai.headerRow}>
-        <View style={ai.iconSquare}>
-          <Ionicons name="fast-food" size={16} color="#FFFFFF" />
+    <View style={fsc.card}>
+      <View style={fsc.header}>
+        <View style={fsc.iconWrap}>
+          <Ionicons name="leaf-outline" size={18} color="#2A9D6E" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={ai.title}>Today's Kenyan Meal Ideas</Text>
-          <Text style={ai.subtitle}>Personalised for your child</Text>
+          <Text style={fsc.stageName}>{stage.stage_name}</Text>
+          <View style={fsc.badge}>
+            <Ionicons name="checkmark-circle-outline" size={11} color="#2A9D6E" />
+            <Text style={fsc.badgeText}>WHO Verified · {stage.guideline_version}</Text>
+          </View>
         </View>
-        <TouchableOpacity
-          onPress={onRefresh}
-          disabled={loading}
-          style={[ai.refreshBtn, loading && { opacity: 0.4 }]}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="refresh" size={15} color={COLORS.primary} />
-        </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={ai.loadingRow}>
-          <ActivityIndicator size="small" color={COLORS.primary} />
-          <Text style={ai.loadingText}>Generating meal ideas…</Text>
+      <View style={fsc.statRow}>
+        {stats.map((s, i) => (
+          <React.Fragment key={s.label}>
+            <View style={fsc.stat}>
+              <Text style={fsc.statValue} numberOfLines={2}>{s.value}</Text>
+              <Text style={fsc.statLabel}>{s.label}</Text>
+            </View>
+            {i < stats.length - 1 && <View style={fsc.divider} />}
+          </React.Fragment>
+        ))}
+      </View>
+
+      <View style={fsc.bfRow}>
+        <Ionicons name="heart-outline" size={14} color={COLORS.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={fsc.bfLabel}>Breastfeeding</Text>
+          <Text style={fsc.bfValue}>{stage.breastfeeding_guidance}</Text>
         </View>
-      ) : (
-        <Text style={ai.body}>{content}</Text>
+      </View>
+
+      {stage.key_facts.length > 0 && (
+        <>
+          <TouchableOpacity style={fsc.expandBtn} onPress={() => setExpanded(e => !e)} activeOpacity={0.7}>
+            <Text style={fsc.expandText}>
+              {expanded ? 'Hide key facts' : `${stage.key_facts.length} key facts for this stage`}
+            </Text>
+            <Ionicons name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={COLORS.primary} />
+          </TouchableOpacity>
+          {expanded && (
+            <View style={fsc.factsList}>
+              {stage.key_facts.map((fact, i) => (
+                <View key={i} style={fsc.factRow}>
+                  <View style={fsc.factDot} />
+                  <Text style={fsc.factText}>{fact}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
       )}
-
-      <View style={ai.aiTag}>
-        <Ionicons name="sparkles" size={10} color={COLORS.primary} />
-        <Text style={ai.aiTagText}>
-          AI-personalised · grounded in WHO IYCF &amp; Kenya MoH guidelines
-        </Text>
-      </View>
     </View>
   );
 }
 
-// ─── Food Group Checker ───────────────────────────────────────────────────────
+// ─── Food Group Checker (6–23 months) ─────────────────────────
 
-function FoodGroupChecker({ ageMonths, checked, onToggle }: {
+function FoodGroupChecker({
+  ageMonths,
+  showMDD,
+  checked,
+  onToggle,
+}: {
   ageMonths: number;
+  showMDD: boolean;
   checked: Record<string, boolean>;
   onToggle: (id: string) => void;
 }) {
-  const available = FOOD_GROUPS.filter(g => ageMonths >= g.minAgeMonths);
-  const status = getMDDStatus(checked);
+  const { data: groups = [], isLoading } = useFoodGroups(ageMonths);
+  const status = computeMDDStatus(checked, groups);
 
-  if (ageMonths < 6) {
-    return (
-      <View style={fg.exclusiveBox}>
-        <View style={fg.exclusiveIconCircle}>
-          <Ionicons name="heart" size={28} color={COLORS.primary} />
-        </View>
-        <Text style={fg.exclusiveTitle}>Exclusive Breastfeeding Period</Text>
-        <Text style={fg.exclusiveText}>
-          Your baby is under 6 months. Breast milk alone provides complete
-          nutrition — no other foods or drinks are needed.
-        </Text>
-        <View style={fg.exclusiveSourceTag}>
-          <Ionicons name="shield-checkmark" size={10} color="#2A9D6E" />
-          <Text style={fg.exclusiveSource}>WHO IYCF Guidelines, 2003</Text>
-        </View>
-      </View>
-    );
-  }
+  if (isLoading) return <SkeletonCard height={200} />;
 
   return (
     <View>
-      {/* MDD Score Card */}
-      <View style={[fg.scoreCard, { backgroundColor: status.bg, borderColor: status.color + '30' }]}>
-        <View style={fg.scoreTop}>
+      {showMDD && (
+        <View style={[fgc.scoreStrip, { backgroundColor: status.bg, borderColor: status.color + '30' }]}>
+          <View style={fgc.scoreLeft}>
+            <Text style={[fgc.scoreNum, { color: status.color }]}>{status.score}</Text>
+            <Text style={[fgc.scoreOf, { color: status.color }]}>/7</Text>
+          </View>
           <View style={{ flex: 1 }}>
-            <View style={fg.scoreNumRow}>
-              <Text style={[fg.scoreNum, { color: status.color }]}>{status.score}</Text>
-              <Text style={[fg.scoreOf, { color: status.color }]}>/7</Text>
-              <View style={[fg.scoreBadge, { backgroundColor: status.color }]}>
-                <Text style={fg.scoreBadgeText}>{status.label}</Text>
-              </View>
+            <View style={[fgc.scoreBadge, { backgroundColor: status.color }]}>
+              <Text style={fgc.scoreBadgeText}>{status.label}</Text>
             </View>
-            <Text style={[fg.scoreLabel, { color: status.color }]}>Food Groups Today</Text>
+            <Text style={[fgc.scoreMsg, { color: status.color + 'CC' }]}>{status.message}</Text>
+            <View style={fgc.bar}>
+              {Array.from({ length: 7 }, (_, i) => (
+                <View
+                  key={i}
+                  style={[fgc.barSeg, { backgroundColor: i < status.score ? status.color : COLORS.border }]}
+                />
+              ))}
+            </View>
+            <Text style={fgc.barLabel}>WHO Minimum Dietary Diversity · target 4+ groups/day</Text>
           </View>
         </View>
-        <Text style={[fg.scoreMessage, { color: status.color + 'DD' }]}>{status.message}</Text>
-        <View style={fg.mddBar}>
-          {[1, 2, 3, 4, 5, 6, 7].map(i => (
-            <View
-              key={i}
-              style={[
-                fg.mddSegment,
-                { backgroundColor: i <= status.score ? status.color : COLORS.border },
-              ]}
-            />
-          ))}
-        </View>
-        <Text style={fg.mddSource}>
-          WHO Minimum Dietary Diversity · Target: 4+ food groups / day
-        </Text>
-      </View>
+      )}
 
-      {/* Food Group Grid */}
-      <View style={fg.groupsGrid}>
-        {available.map(g => {
-          const isChecked = checked[g.id] ?? false;
+      <View style={fgc.grid}>
+        {groups.map(g => {
+          const isOn = checked[g.id] ?? false;
           return (
-            <TouchableOpacity
+            <FoodGroupCard
               key={g.id}
-              style={[
-                fg.groupCard,
-                isChecked && { borderColor: g.color, backgroundColor: g.bg, borderWidth: 2 },
-              ]}
-              onPress={() => onToggle(g.id)}
-              activeOpacity={0.75}
-            >
-              {isChecked && (
-                <View style={[fg.checkMark, { backgroundColor: g.color }]}>
-                  <Ionicons name="checkmark" size={10} color="#FFFFFF" />
-                </View>
-              )}
-              <View style={[
-                fg.groupIconCircle,
-                { backgroundColor: isChecked ? g.color : COLORS.background },
-              ]}>
-                <Ionicons
-                  name={g.icon as any}
-                  size={18}
-                  color={isChecked ? '#FFFFFF' : COLORS.textMuted}
-                />
-              </View>
-              <Text
-                style={[fg.groupName, isChecked && { color: g.color, fontWeight: '700' }]}
-                numberOfLines={2}
-              >
-                {g.name}
-              </Text>
-              <Text style={fg.groupExamples} numberOfLines={2}>{g.examples}</Text>
-              <Text style={[fg.groupWhy, isChecked && { color: g.color + 'BB' }]} numberOfLines={2}>
-                {g.whyImportant}
-              </Text>
-            </TouchableOpacity>
+              group={g}
+              checked={isOn}
+              onToggle={() => onToggle(g.id)}
+            />
           );
         })}
       </View>
@@ -300,18 +327,176 @@ function FoodGroupChecker({ ageMonths, checked, onToggle }: {
   );
 }
 
-// ─── Section Header Component ─────────────────────────────────────────────────
+function FoodGroupCard({
+  group, checked, onToggle,
+}: {
+  group: FoodGroup; checked: boolean; onToggle: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        fgc.groupCard,
+        checked && { borderColor: group.color_hex, borderWidth: 2, backgroundColor: group.color_hex + '0D' },
+      ]}
+      onPress={onToggle}
+      activeOpacity={0.75}
+    >
+      {checked && (
+        <View style={[fgc.check, { backgroundColor: group.color_hex }]}>
+          <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+        </View>
+      )}
+      <View style={[fgc.dot, { backgroundColor: checked ? group.color_hex : COLORS.border }]} />
+      <Text style={[fgc.groupName, checked && { color: group.color_hex }]} numberOfLines={2}>
+        {group.name}
+      </Text>
+      <Text style={fgc.examples} numberOfLines={3}>{group.examples_local}</Text>
+      <Text style={[fgc.why, checked && { color: group.color_hex + 'AA' }]} numberOfLines={2}>
+        {group.why_important}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Phase: Family Foods (24+ months) ─────────────────────────
+
+function FamilyFoodsSection({ ageMonths }: { ageMonths: number }) {
+  const { data: stage, isLoading } = useFeedingStage(ageMonths);
+
+  if (isLoading) return <SkeletonCard height={140} />;
+  if (!stage) return null;
+
+  return (
+    <View style={ff.card}>
+      <View style={ff.header}>
+        <View style={ff.iconWrap}>
+          <Ionicons name="people-outline" size={18} color="#7B5EA7" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={ff.title}>Family Foods Stage</Text>
+          <Text style={ff.subtitle}>{stage.stage_name}</Text>
+        </View>
+      </View>
+
+      <View style={ff.row}>
+        <View style={ff.stat}>
+          <Text style={ff.statVal}>{stage.meals_per_day}</Text>
+          <Text style={ff.statLbl}>meals / day</Text>
+        </View>
+        <View style={ff.divider} />
+        <View style={ff.stat}>
+          <Text style={ff.statVal}>{stage.snacks_per_day}</Text>
+          <Text style={ff.statLbl}>snacks</Text>
+        </View>
+        <View style={ff.divider} />
+        <View style={ff.stat}>
+          <Text style={ff.statVal}>{stage.texture}</Text>
+          <Text style={ff.statLbl}>texture</Text>
+        </View>
+      </View>
+
+      <View style={ff.bfRow}>
+        <Ionicons name="heart-outline" size={14} color={COLORS.primary} />
+        <Text style={ff.bfText}>{stage.breastfeeding_guidance}</Text>
+      </View>
+
+      {stage.key_facts.length > 0 && (
+        <View style={ff.facts}>
+          {stage.key_facts.map((fact, i) => (
+            <View key={i} style={ff.factRow}>
+              <View style={ff.factDot} />
+              <Text style={ff.factText}>{fact}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Meal Suggestion Card ──────────────────────────────────────
+
+function MealSuggestionCard({
+  content, loading, onRefresh,
+}: {
+  content: string; loading: boolean; onRefresh: () => void;
+}) {
+  return (
+    <View style={mc.card}>
+      <View style={mc.header}>
+        <View style={mc.iconWrap}>
+          <Ionicons name="restaurant-outline" size={18} color="#E67E22" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={mc.title}>Today's Kenyan Meal Ideas</Text>
+          <Text style={mc.subtitle}>Personalised · WHO IYCF &amp; Kenya MoH grounded</Text>
+        </View>
+        <TouchableOpacity
+          onPress={onRefresh}
+          disabled={loading}
+          style={[mc.refreshBtn, loading && { opacity: 0.4 }]}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="refresh-outline" size={16} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={mc.loadingRow}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={mc.loadingText}>Generating Kenyan meal ideas…</Text>
+        </View>
+      ) : (
+        <Text style={mc.body}>{content}</Text>
+      )}
+
+      <View style={mc.footer}>
+        <Ionicons name="sparkles-outline" size={11} color={COLORS.textMuted} />
+        <Text style={mc.footerText}>AI-generated — does not replace clinical nutrition assessment</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Referral Card ─────────────────────────────────────────────
+
+function ReferralCard() {
+  return (
+    <View style={rc.card}>
+      <View style={rc.iconWrap}>
+        <Ionicons name="medkit-outline" size={20} color="#5B6EAE" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={rc.title}>Need Professional Advice?</Text>
+        <Text style={rc.body}>
+          For therapeutic feeding, growth faltering, or clinical nutrition concerns, visit your
+          nearest MCH clinic or consult a certified nutritionist.
+        </Text>
+        <View style={rc.divider} />
+        <Text style={rc.disclaimer}>
+          Feeding guidance is sourced from WHO IYCF Guidelines and the Kenya MCH Handbook.
+          Meal suggestions are AI-generated and do not replace clinical assessment.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Skeleton ──────────────────────────────────────────────────
+
+function SkeletonCard({ height }: { height: number }) {
+  return <View style={[sk.box, { height }]} />;
+}
+
+// ─── Section Header ────────────────────────────────────────────
 
 function SectionHeader({
-  icon, iconColor = COLORS.primary, title, action, onAction,
+  title, action, onAction,
 }: {
-  icon: string; iconColor?: string; title: string; action?: string; onAction?: () => void;
+  title: string; action?: string; onAction?: () => void;
 }) {
   return (
     <View style={sh.row}>
-      <View style={[sh.iconCircle, { backgroundColor: iconColor + '18' }]}>
-        <Ionicons name={icon as any} size={14} color={iconColor} />
-      </View>
       <Text style={sh.title}>{title}</Text>
       {action && onAction && (
         <TouchableOpacity onPress={onAction} activeOpacity={0.7}>
@@ -322,71 +507,77 @@ function SectionHeader({
   );
 }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ─── Main Screen ───────────────────────────────────────────────
 
 export default function NutritionScreen() {
   const router = useRouter();
   const { children, selectedChildId, growthRecords, fetchGrowthRecords } = useChildStore();
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
 
-  const [checkedGroups, setCheckedGroups]     = useState<Record<string, boolean>>({});
-  const [mealSuggestions, setMealSuggestions] = useState('');
-  const [loadingMeals, setLoadingMeals]       = useState(false);
-  const [refreshing, setRefreshing]           = useState(false);
+  const [checkedGroups, setCheckedGroups] = useState<Record<string, boolean>>({});
+  const [mealContent, setMealContent]     = useState('');
+  const [mealLoading, setMealLoading]     = useState(false);
+  const [refreshing, setRefreshing]       = useState(false);
 
   const ageMonths = useMemo(() => {
     if (!activeChild?.date_of_birth) return 0;
     return getAgeMonths(activeChild.date_of_birth);
   }, [activeChild?.date_of_birth]);
 
-  const stage = useMemo(() => getFeedingStage(ageMonths), [ageMonths]);
-  const latestGrowth = growthRecords[0];
+  const phase = getAgePhase(ageMonths);
+
+  const { data: stage }       = useFeedingStage(ageMonths);
+  const { data: groups = [] } = useFoodGroups(ageMonths);
+  const latestGrowth          = growthRecords[0];
+
+  const mddStatus    = computeMDDStatus(checkedGroups, groups);
+  const checkedCount = Object.values(checkedGroups).filter(Boolean).length;
 
   const childContext = useMemo(() => {
     if (!activeChild) return '';
-    const growth = latestGrowth
-      ? `Weight: ${latestGrowth.weight_kg}kg, height: ${latestGrowth.height_cm ?? 'not recorded'}cm, WAZ: ${latestGrowth.waz ?? 'N/A'}, HAZ: ${latestGrowth.haz ?? 'N/A'}, WHZ: ${latestGrowth.whz ?? 'N/A'}.`
+    const g = latestGrowth
+      ? `Weight: ${latestGrowth.weight_kg}kg, height: ${latestGrowth.height_cm ?? 'not recorded'}cm, WAZ: ${latestGrowth.waz ?? 'N/A'}.`
       : 'No growth records yet.';
-    return `Child: ${activeChild.full_name}, ${ageMonths} months, sex: ${activeChild.sex}. ${growth}`;
+    return `Child: ${activeChild.full_name}, ${ageMonths} months, sex: ${activeChild.sex}. ${g}`;
   }, [activeChild, ageMonths, latestGrowth]);
 
-  const fetchMealSuggestions = useCallback(async () => {
-    if (!childContext) return;
-    setLoadingMeals(true);
-    const checkedNames = FOOD_GROUPS.filter(g => checkedGroups[g.id]).map(g => g.name);
-    const missing = FOOD_GROUPS.filter(
-      g => ageMonths >= g.minAgeMonths && !checkedGroups[g.id],
-    ).map(g => g.name);
+  const fetchMeals = useCallback(async () => {
+    if (!childContext || !stage || phase === 'exclusive') return;
+    setMealLoading(true);
+    const eaten   = groups.filter(g => checkedGroups[g.id]).map(g => g.name);
+    const missing = groups.filter(g => !checkedGroups[g.id]).map(g => g.name);
     try {
       const result = await askGroq(
         `${childContext}
-Verified feeding stage: ${stage.stage}. Texture: ${stage.texture}. Amount per meal: ${stage.amountPerMeal}.
-Food groups eaten today: ${checkedNames.length > 0 ? checkedNames.join(', ') : 'none yet'}.
+Stage: ${stage.stage_name}. Texture: ${stage.texture}. Amount: ${stage.amount_per_meal}.
+Eaten today: ${eaten.length > 0 ? eaten.join(', ') : 'none yet'}.
 Missing food groups: ${missing.join(', ')}.
 
-Using ONLY locally available Kenyan foods and WHO complementary feeding guidelines, suggest 3 specific meal ideas for today that address the missing food groups. Use foods like ugali, sukuma wiki, beans, eggs, uji, githeri, liver, fish, omena, sweet potato, mango, avocado, groundnut paste. Format as 3 numbered meals with one sentence each. Do not invent nutritional claims.`,
+Using ONLY Kenyan foods and WHO complementary feeding guidelines, suggest 3 specific meal ideas.
+Use: ugali, sukuma wiki, beans, eggs, uji, githeri, liver, fish, omena, sweet potato, mango, avocado, groundnut paste.
+Format: 3 numbered meals, one sentence each. Do not invent nutritional claims.`,
         'You are a Kenya MCH nutrition counsellor. Only suggest meals using locally available Kenyan foods consistent with WHO IYCF and Kenya MoH guidelines. Never fabricate nutritional claims.',
         0.5,
       );
-      setMealSuggestions(result);
+      setMealContent(result);
     } catch {
-      setMealSuggestions('Could not load suggestions. Tap the refresh button to try again.');
+      setMealContent('Could not load suggestions. Tap refresh to try again.');
     } finally {
-      setLoadingMeals(false);
+      setMealLoading(false);
     }
-  }, [childContext, checkedGroups, ageMonths, stage]);
+  }, [childContext, checkedGroups, stage, groups, phase]);
 
   useEffect(() => {
     if (activeChild) {
       fetchGrowthRecords(activeChild.id);
-      fetchMealSuggestions();
+      if (phase !== 'exclusive') fetchMeals();
     }
   }, [activeChild?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     if (activeChild) await fetchGrowthRecords(activeChild.id);
-    await fetchMealSuggestions();
+    if (phase !== 'exclusive') await fetchMeals();
     setRefreshing(false);
   };
 
@@ -394,116 +585,111 @@ Using ONLY locally available Kenyan foods and WHO complementary feeding guidelin
     setCheckedGroups(prev => ({ ...prev, [id]: !prev[id] }));
 
   const resetChecklist = () => {
-    const reset = () => setCheckedGroups({});
+    const doReset = () => setCheckedGroups({});
     Platform.OS === 'web'
-      ? window.confirm("Reset today's food checklist?") && reset()
-      : Alert.alert('Reset Checklist', "Clear today's food group log?", [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Reset', style: 'destructive', onPress: reset },
-        ]);
+      ? window.confirm("Reset today's food checklist?") && doReset()
+      : Alert.alert(
+          'Reset Checklist',
+          "Clear today's food group log?",
+          [{ text: 'Cancel', style: 'cancel' }, { text: 'Reset', style: 'destructive', onPress: doReset }],
+        );
   };
 
-  // ─── Empty state ───────────────────────────────────────────────────────────
+  // ── Empty state ──────────────────────────────────────────────
 
   if (!activeChild) {
     return (
-      <View style={styles.screen}>
-        {/* Header still shown */}
-        <View style={styles.header}>
-          <View style={styles.headerTopBar}>
-            <View style={styles.headerIconCircle}>
-              <Ionicons name="nutrition" size={20} color={COLORS.primary} />
-            </View>
-            <Text style={styles.headerTitle}>Nutrition Guide</Text>
+      <View style={s.screen}>
+        <View style={s.header}>
+          <View style={s.headerTopBar}>
+            <Ionicons name="nutrition-outline" size={20} color={COLORS.onPrimary} />
+            <Text style={s.headerTitle}>Nutrition Guide</Text>
           </View>
         </View>
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Text style={styles.emptyEmoji}>🥦</Text>
-          </View>
-          <Text style={styles.emptyTitle}>No child selected</Text>
-          <Text style={styles.emptySub}>
-            Head to the Children tab to select or add a child profile to see personalised nutrition guidance.
+        <View style={s.empty}>
+          <Text style={s.emptyEmoji}>🥦</Text>
+          <Text style={s.emptyTitle}>No child selected</Text>
+          <Text style={s.emptySub}>
+            Go to the Children tab to select or add a child profile.
           </Text>
           <TouchableOpacity
-            style={styles.goBtn}
+            style={s.emptyBtn}
             onPress={() => router.push('/(tabs)/children' as any)}
             activeOpacity={0.85}
           >
-            <Ionicons name="people" size={16} color={COLORS.onPrimary} />
-            <Text style={styles.goBtnText}>Go to Children</Text>
+            <Ionicons name="people-outline" size={16} color={COLORS.onPrimary} />
+            <Text style={s.emptyBtnText}>Go to Children</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  // ─── Score summary for header ──────────────────────────────────────────────
-  const mddStatus = getMDDStatus(checkedGroups);
-  const checkedCount = Object.values(checkedGroups).filter(Boolean).length;
+  // ── Phase label for header subtitle ─────────────────────────
+
+  const phaseLabel: Record<AgePhase, string> = {
+    exclusive:    'Exclusive breastfeeding',
+    introduction: 'Complementary feeding',
+    full:         'Complementary feeding',
+    family:       'Family foods',
+  };
 
   return (
-    <View style={styles.screen}>
-      {/* ── Hero Header ──────────────────────────────────────────────────── */}
-      <View style={styles.header}>
-        {/* Decorative circles */}
-        <View style={styles.headerDecorCircle1} />
-        <View style={styles.headerDecorCircle2} />
-
-        {/* Top bar */}
-        <View style={styles.headerTopBar}>
-          <View style={styles.headerIconCircle}>
-            <Ionicons name="nutrition" size={18} color={COLORS.primary} />
+    <View style={s.screen}>
+      {/* ── Header ───────────────────────────────────────────── */}
+      <View style={s.header}>
+        <View style={s.headerTopBar}>
+          <View style={s.headerIconCircle}>
+            <Ionicons name="nutrition-outline" size={18} color={COLORS.primary} />
           </View>
-          <Text style={styles.headerTitle}>Nutrition Guide</Text>
+          <Text style={s.headerTitle}>Nutrition Guide</Text>
           <TouchableOpacity
             onPress={onRefresh}
             disabled={refreshing}
-            style={[styles.headerRefreshBtn, refreshing && { opacity: 0.5 }]}
+            style={[s.headerRefresh, refreshing && { opacity: 0.5 }]}
             activeOpacity={0.7}
           >
-            <Ionicons name="refresh" size={18} color={COLORS.onPrimary} />
+            <Ionicons name="refresh-outline" size={18} color={COLORS.onPrimary} />
           </TouchableOpacity>
         </View>
 
-        {/* Child info strip */}
-        <View style={styles.childStrip}>
-          <View style={styles.childAvatarCircle}>
+        {/* Child strip */}
+        <View style={s.childStrip}>
+          <View style={s.childAvatar}>
             <Ionicons
-              name={activeChild.sex === 'female' ? 'female' : 'male'}
+              name={activeChild.sex === 'female' ? 'female-outline' : 'male-outline'}
               size={14}
               color={COLORS.onPrimary}
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.childName}>{activeChild.full_name}</Text>
-            <Text style={styles.childAge}>
-              {ageMonths} months · {stage.stage.split('(')[0].trim()}
+            <Text style={s.childName}>{activeChild.full_name}</Text>
+            <Text style={s.childAge}>
+              {ageMonths} months · {phaseLabel[phase]}
             </Text>
           </View>
 
-          {/* MDD pill in header */}
-          {ageMonths >= 6 && (
-            <View style={styles.mddHeaderPill}>
-              <Text style={styles.mddHeaderScore}>{mddStatus.score}</Text>
-              <Text style={styles.mddHeaderOf}>/7</Text>
-              <Text style={styles.mddHeaderLabel}> groups</Text>
+          {/* MDD pill — only for full phase */}
+          {phase === 'full' && (
+            <View style={s.mddPill}>
+              <Text style={s.mddPillScore}>{mddStatus.score}</Text>
+              <Text style={s.mddPillOf}>/7 groups</Text>
             </View>
           )}
 
-          {latestGrowth?.waz !== null && latestGrowth?.waz !== undefined && (
-            <View style={styles.wazPill}>
-              <Ionicons name="trending-up" size={10} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.wazText}>WAZ {latestGrowth.waz.toFixed(1)}</Text>
+          {/* WAZ pill */}
+          {latestGrowth?.waz != null && (
+            <View style={s.wazPill}>
+              <Text style={s.wazText}>WAZ {latestGrowth.waz.toFixed(1)}</Text>
             </View>
           )}
         </View>
       </View>
 
-      {/* ── Scroll Content ────────────────────────────────────────────────── */}
+      {/* ── Content by phase ─────────────────────────────────── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={s.scroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -513,146 +699,171 @@ Using ONLY locally available Kenyan foods and WHO complementary feeding guidelin
           />
         }
       >
-        {/* Rotating Tip */}
-        <TipCard ageMonths={ageMonths} />
 
-        {/* ── Feeding Stage ─────────────────────────────────────────────── */}
-        <SectionHeader
-          icon="shield-checkmark"
-          iconColor="#2A9D6E"
-          title="Current Feeding Stage"
-          action="WHO Verified ✓"
-        />
-        <FeedingStageCard ageMonths={ageMonths} />
+        {/* ══ 0–5 months ══════════════════════════════════════ */}
+        {phase === 'exclusive' && (
+          <ExclusiveBreastfeedingScreen ageMonths={ageMonths} />
+        )}
 
-        {/* ── Food Group Checklist ──────────────────────────────────────── */}
-        <SectionHeader
-          icon="checkmark-circle"
-          iconColor={COLORS.primary}
-          title="Today's Food Groups"
-          action={checkedCount > 0 ? 'Reset' : undefined}
-          onAction={checkedCount > 0 ? resetChecklist : undefined}
-        />
-        <Text style={styles.sectionDesc}>
-          Tap each food group your child has eaten today. WHO recommends at least 4 groups daily for children over 6 months.
-        </Text>
-        <FoodGroupChecker
-          ageMonths={ageMonths}
-          checked={checkedGroups}
-          onToggle={toggleGroup}
-        />
+        {/* ══ 6–11 months ═════════════════════════════════════ */}
+        {phase === 'introduction' && (
+          <>
+            <TipBanner ageMonths={ageMonths} />
 
-        {/* ── Meal Suggestions ─────────────────────────────────────────── */}
-        <SectionHeader
-          icon="fast-food"
-          iconColor="#E67E22"
-          title="Meal Suggestions"
-        />
-        <Text style={styles.sectionDesc}>
-          Kenyan meals suggested based on what your child has eaten today and their growth data.
-        </Text>
-        <AICard
-          content={mealSuggestions}
-          loading={loadingMeals}
-          onRefresh={fetchMealSuggestions}
-        />
+            <SectionHeader title="Current Feeding Stage" />
+            <FeedingStageCard ageMonths={ageMonths} />
 
-        {/* ── Referral Banner ───────────────────────────────────────────── */}
-        <View style={styles.referralCard}>
-          <View style={styles.referralDecorCircle} />
-          <View style={styles.referralIconCircle}>
-            <Ionicons name="medkit" size={18} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.referralTitle}>Need Professional Advice?</Text>
-            <Text style={styles.referralText}>
-              For therapeutic feeding or growth concerns, consult a certified nutritionist at your nearest MCH clinic.
+            <SectionHeader
+              title="Today's Food Groups"
+              action={checkedCount > 0 ? 'Reset' : undefined}
+              onAction={checkedCount > 0 ? resetChecklist : undefined}
+            />
+            <Text style={s.sectionDesc}>
+              Tap each food group your child has eaten today. Aim for variety — the more
+              groups, the better the nutrition at this introduction stage.
             </Text>
-            <View style={styles.referralDivider} />
-            <Text style={styles.referralNote}>
-              Feeding stage data is sourced from WHO IYCF Guidelines and the Kenya MCH Handbook. Meal suggestions are AI-generated based on these verified guidelines and do not replace clinical assessment.
-            </Text>
-          </View>
-        </View>
+            <FoodGroupChecker
+              ageMonths={ageMonths}
+              showMDD={false}
+              checked={checkedGroups}
+              onToggle={toggleGroup}
+            />
 
+            <SectionHeader title="Meal Suggestions" />
+            <Text style={s.sectionDesc}>
+              Kenyan meals suited to your baby's age and today's food intake.
+            </Text>
+            <MealSuggestionCard
+              content={mealContent}
+              loading={mealLoading}
+              onRefresh={fetchMeals}
+            />
+          </>
+        )}
+
+        {/* ══ 12–23 months ════════════════════════════════════ */}
+        {phase === 'full' && (
+          <>
+            <TipBanner ageMonths={ageMonths} />
+
+            <SectionHeader title="Current Feeding Stage" />
+            <FeedingStageCard ageMonths={ageMonths} />
+
+            <SectionHeader
+              title="Today's Food Groups"
+              action={checkedCount > 0 ? 'Reset' : undefined}
+              onAction={checkedCount > 0 ? resetChecklist : undefined}
+            />
+            <Text style={s.sectionDesc}>
+              WHO recommends at least 4 food groups daily for children 6–23 months.
+              Tap each group your child has eaten today.
+            </Text>
+            <FoodGroupChecker
+              ageMonths={ageMonths}
+              showMDD={true}
+              checked={checkedGroups}
+              onToggle={toggleGroup}
+            />
+
+            <SectionHeader title="Meal Suggestions" />
+            <Text style={s.sectionDesc}>
+              Kenyan meals based on what your child has eaten today and their growth data.
+            </Text>
+            <MealSuggestionCard
+              content={mealContent}
+              loading={mealLoading}
+              onRefresh={fetchMeals}
+            />
+          </>
+        )}
+
+        {/* ══ 24+ months ══════════════════════════════════════ */}
+        {phase === 'family' && (
+          <>
+            <TipBanner ageMonths={ageMonths} />
+
+            <SectionHeader title="Feeding at This Stage" />
+            <FamilyFoodsSection ageMonths={ageMonths} />
+
+            <SectionHeader
+              title="Today's Food Groups"
+              action={checkedCount > 0 ? 'Reset' : undefined}
+              onAction={checkedCount > 0 ? resetChecklist : undefined}
+            />
+            <Text style={s.sectionDesc}>
+              Keep aiming for variety. Tap each group your child has eaten today.
+            </Text>
+            <FoodGroupChecker
+              ageMonths={ageMonths}
+              showMDD={false}
+              checked={checkedGroups}
+              onToggle={toggleGroup}
+            />
+
+            <SectionHeader title="Meal Suggestions" />
+            <MealSuggestionCard
+              content={mealContent}
+              loading={mealLoading}
+              onRefresh={fetchMeals}
+            />
+          </>
+        )}
+
+        <ReferralCard />
         <View style={{ height: 140 }} />
       </ScrollView>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.background },
 
-  // Header
   header: {
     backgroundColor: COLORS.primary,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     paddingTop: 56,
-    paddingBottom: 20,
+    paddingBottom: 18,
     paddingHorizontal: 20,
-    overflow: 'hidden',
-    // Shadow
     shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  headerDecorCircle1: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 40,
-    borderColor: 'rgba(255,255,255,0.07)',
-    top: -60,
-    right: -60,
-  },
-  headerDecorCircle2: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 24,
-    borderColor: 'rgba(255,255,255,0.06)',
-    bottom: -40,
-    left: 40,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   headerTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   headerIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: COLORS.onPrimary,
     letterSpacing: -0.3,
   },
-  headerRefreshBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  headerRefresh: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // Child strip in header
   childStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -662,45 +873,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  childAvatarCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  childAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   childName: { fontSize: 14, fontWeight: '700', color: COLORS.onPrimary },
-  childAge:  { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 1 },
+  childAge:  { fontSize: 11, color: 'rgba(255,255,255,0.72)', marginTop: 1 },
 
-  mddHeaderPill: {
+  mddPill: {
     flexDirection: 'row',
     alignItems: 'baseline',
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: RADIUS.full,
     paddingHorizontal: 10,
     paddingVertical: 5,
+    gap: 2,
   },
-  mddHeaderScore: { fontSize: 15, fontWeight: '800', color: COLORS.onPrimary },
-  mddHeaderOf:    { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
-  mddHeaderLabel: { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
+  mddPillScore: { fontSize: 14, fontWeight: '800', color: COLORS.onPrimary },
+  mddPillOf:    { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
 
   wazPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: RADIUS.full,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  wazText: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
+  wazText: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
 
-  // Scroll
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
-
   sectionDesc: {
     fontSize: 12,
     color: COLORS.textMuted,
@@ -709,28 +915,11 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
 
-  // Empty state
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  emptyIconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  emptyEmoji:  { fontSize: 44 },
-  emptyTitle:  { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 10 },
-  emptySub:    { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
-  goBtn:       {
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  emptyEmoji: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8 },
+  emptySub:   { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  emptyBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.xl,
     paddingHorizontal: 24,
@@ -738,16 +927,377 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 5,
   },
-  goBtnText: { color: COLORS.onPrimary, fontWeight: '700', fontSize: 14 },
+  emptyBtnText: { color: COLORS.onPrimary, fontWeight: '700', fontSize: 14 },
+});
 
-  // Referral card
-  referralCard: {
+const sh = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 28,
+    marginBottom: 10,
+  },
+  title:  { flex: 1, fontSize: 16, fontWeight: '800', color: COLORS.textPrimary },
+  action: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+});
+
+// Exclusive breastfeeding screen
+const excl = StyleSheet.create({
+  container: { gap: 16 },
+
+  heroCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopWidth: 4,
+    borderTopColor: COLORS.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  heroIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  heroTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  heroAge: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  heroBody: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 14,
+  },
+  heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  heroBadgeText: { fontSize: 10, color: '#2A9D6E', fontStyle: 'italic', fontWeight: '600' },
+
+  guidanceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  guidanceCard: {
+    width: '47.5%',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
+    minHeight: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  guidanceIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guidanceTitle: { fontSize: 12, fontWeight: '800', color: COLORS.textPrimary },
+  guidanceBody:  { fontSize: 11, color: COLORS.textMuted, lineHeight: 17 },
+
+  tipCard: {
+    backgroundColor: '#1A6BB5',
+    borderRadius: RADIUS.xl,
+    padding: 16,
+  },
+  tipPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  tipPillText: { fontSize: 10, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.8 },
+  tipText:     { fontSize: 13, color: '#FFFFFF', lineHeight: 20, fontWeight: '500', marginBottom: 10 },
+  tipFooter:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  tipSource:   { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic', flex: 1 },
+  tipDots:     { flexDirection: 'row', gap: 4 },
+  tipDot:      { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
+  tipDotActive:{ backgroundColor: 'rgba(255,255,255,0.9)', width: 10 },
+
+  milestoneCard: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: '#F3EFFC',
+    borderRadius: RADIUS.xl,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#D8D0F5',
+    alignItems: 'flex-start',
+  },
+  milestoneTitle: { fontSize: 13, fontWeight: '800', color: '#7B5EA7', marginBottom: 5 },
+  milestoneBody:  { fontSize: 12, color: '#7B5EA7CC', lineHeight: 19 },
+});
+
+// Tip banner (6+ months)
+const tb = StyleSheet.create({
+  skeleton: {
+    height: 80,
+    backgroundColor: '#1A6BB5',
+    borderRadius: RADIUS.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  card: {
+    backgroundColor: '#1A6BB5',
+    borderRadius: RADIUS.xl,
+    padding: 16,
+    marginBottom: 4,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  pillText: { fontSize: 10, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.8 },
+  text:     { fontSize: 13, color: '#FFFFFF', lineHeight: 20, fontWeight: '500', marginBottom: 10 },
+  footer:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  source:   { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic', flex: 1 },
+  dots:     { flexDirection: 'row', gap: 4 },
+  dot:      { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
+  dotActive:{ backgroundColor: 'rgba(255,255,255,0.9)', width: 10 },
+});
+
+// Feeding stage card
+const fsc = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: 16,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2A9D6E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#E8F8F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stageName: { fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 4 },
+  badge:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  badgeText: { fontSize: 10, color: '#2A9D6E', fontWeight: '600', fontStyle: 'italic' },
+
+  statRow: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  stat:      { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  divider:   { width: 1, backgroundColor: COLORS.border, marginVertical: 4 },
+  statValue: { fontSize: 11, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'center', lineHeight: 15, marginBottom: 3 },
+  statLabel: { fontSize: 9, fontWeight: '600', color: COLORS.textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
+
+  bfRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#FFF5F8',
+    borderRadius: RADIUS.md,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FFD6E7',
+  },
+  bfLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textMuted, marginBottom: 2 },
+  bfValue: { fontSize: 12, color: COLORS.textPrimary, lineHeight: 18 },
+
+  expandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: 2,
+  },
+  expandText: { flex: 1, fontSize: 12, color: COLORS.primary, fontWeight: '700' },
+
+  factsList: { marginTop: 10, gap: 10 },
+  factRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  factDot:   { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#2A9D6E', marginTop: 5, flexShrink: 0 },
+  factText:  { flex: 1, fontSize: 12, color: COLORS.textPrimary, lineHeight: 19 },
+});
+
+// Food group checker
+const fgc = StyleSheet.create({
+  scoreStrip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    borderRadius: RADIUS.xl,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+  },
+  scoreLeft:      { alignItems: 'flex-end', paddingTop: 2 },
+  scoreNum:       { fontSize: 38, fontWeight: '800', lineHeight: 40 },
+  scoreOf:        { fontSize: 13, fontWeight: '500', color: COLORS.textMuted },
+  scoreBadge:     { alignSelf: 'flex-start', borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6 },
+  scoreBadgeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 11 },
+  scoreMsg:       { fontSize: 11, lineHeight: 17, marginBottom: 10 },
+  bar:            { flexDirection: 'row', gap: 4, marginBottom: 6 },
+  barSeg:         { flex: 1, height: 6, borderRadius: 3 },
+  barLabel:       { fontSize: 9, color: COLORS.textMuted, fontStyle: 'italic' },
+
+  grid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
+  groupCard: {
+    width: '47.5%',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    position: 'relative',
+    minHeight: 110,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  check: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dot:       { width: 10, height: 10, borderRadius: 5, marginBottom: 8 },
+  groupName: { fontSize: 11, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4, lineHeight: 15 },
+  examples:  { fontSize: 10, color: COLORS.textMuted, lineHeight: 14, marginBottom: 4 },
+  why:       { fontSize: 10, color: COLORS.primary, lineHeight: 14, fontStyle: 'italic' },
+});
+
+// Family foods section
+const ff = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: 16,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 4,
+    borderLeftColor: '#7B5EA7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#F3EFFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title:    { fontSize: 14, fontWeight: '800', color: COLORS.textPrimary },
+  subtitle: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+
+  row:     { flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: RADIUS.lg, paddingVertical: 12, marginBottom: 14 },
+  stat:    { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  divider: { width: 1, backgroundColor: COLORS.border, marginVertical: 4 },
+  statVal: { fontSize: 11, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 3 },
+  statLbl: { fontSize: 9, fontWeight: '600', color: COLORS.textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
+
+  bfRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  bfText: { fontSize: 12, color: COLORS.textPrimary, flex: 1, lineHeight: 18 },
+
+  facts:   { gap: 10, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12 },
+  factRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  factDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#7B5EA7', marginTop: 5, flexShrink: 0 },
+  factText:{ flex: 1, fontSize: 12, color: COLORS.textPrimary, lineHeight: 19 },
+});
+
+// Meal suggestion card
+const mc = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: 16,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 4,
+    borderLeftColor: '#E67E22',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  header:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  iconWrap:   { width: 34, height: 34, borderRadius: RADIUS.md, backgroundColor: '#FEF5EB', alignItems: 'center', justifyContent: 'center' },
+  title:      { fontSize: 13, fontWeight: '800', color: COLORS.textPrimary },
+  subtitle:   { fontSize: 10, color: COLORS.textMuted, marginTop: 1 },
+  refreshBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  loadingText:{ fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic' },
+  body:       { fontSize: 13, color: COLORS.textPrimary, lineHeight: 22 },
+  footer:     { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border },
+  footerText: { fontSize: 10, color: COLORS.textMuted, fontStyle: 'italic', flex: 1 },
+});
+
+// Referral card
+const rc = StyleSheet.create({
+  card: {
     flexDirection: 'row',
     gap: 14,
     backgroundColor: '#F0EFFC',
@@ -756,416 +1306,15 @@ const styles = StyleSheet.create({
     marginTop: 24,
     borderWidth: 1,
     borderColor: '#D0CEFA',
-    overflow: 'hidden',
-    position: 'relative',
   },
-  referralDecorCircle: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 24,
-    borderColor: 'rgba(91,110,174,0.1)',
-    bottom: -40,
-    right: -30,
-  },
-  referralIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#5B6EAE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 2,
-    shadowColor: '#5B6EAE',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  referralTitle:   { fontSize: 14, fontWeight: '800', color: '#3A4A8A', marginBottom: 6 },
-  referralText:    { fontSize: 12, color: '#3A4A8A', lineHeight: 18, marginBottom: 10 },
-  referralDivider: { height: 1, backgroundColor: '#D0CEFA', marginBottom: 10 },
-  referralNote:    { fontSize: 11, color: '#7B8FA1', lineHeight: 16, fontStyle: 'italic' },
+  iconWrap:   { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8EAF6', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 },
+  title:      { fontSize: 13, fontWeight: '800', color: '#3A4A8A', marginBottom: 6 },
+  body:       { fontSize: 12, color: '#3A4A8A', lineHeight: 18, marginBottom: 10 },
+  divider:    { height: 1, backgroundColor: '#D0CEFA', marginBottom: 8 },
+  disclaimer: { fontSize: 11, color: '#7B8FA1', lineHeight: 16, fontStyle: 'italic' },
 });
 
-// Section header styles
-const sh = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-    marginTop: 28,
-  },
-  iconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title:  { flex: 1, fontSize: 16, fontWeight: '800', color: COLORS.textPrimary },
-  action: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
-});
-
-// Feeding stage card styles
-const sc = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    padding: 18,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-    position: 'relative',
-    // Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-    // Green left accent
-    borderLeftWidth: 4,
-    borderLeftColor: '#2A9D6E',
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 32,
-    borderColor: 'rgba(42,157,110,0.05)',
-    bottom: -50,
-    right: -50,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 18,
-  },
-  iconSquare: {
-    width: 38,
-    height: 38,
-    borderRadius: RADIUS.md,
-    backgroundColor: '#2A9D6E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#2A9D6E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  stageName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-    marginBottom: 5,
-    lineHeight: 20,
-  },
-  sourceTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  sourceTagText: { fontSize: 10, color: '#2A9D6E', fontWeight: '600', fontStyle: 'italic' },
-
-  // Stats grid
-  grid: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.lg,
-    padding: 14,
-    marginBottom: 16,
-  },
-  gridItem: { flex: 1, alignItems: 'center', gap: 2 },
-  gridDivider: { width: 1, height: 44, backgroundColor: COLORS.border },
-  gridEmoji: { fontSize: 16, marginBottom: 2 },
-  gridValue: { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'center', lineHeight: 16 },
-  gridLabel: { fontSize: 9, fontWeight: '600', color: COLORS.textMuted, textAlign: 'center' },
-
-  // Breastfeeding
-  bfRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: '#FFF0F5',
-    borderRadius: RADIUS.md,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#FFD6E7',
-  },
-  bfIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#FFD6E7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  bfLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textMuted, marginBottom: 3 },
-  bfValue: { fontSize: 12, color: COLORS.textPrimary, lineHeight: 18 },
-
-  // Expand
-  expandBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    marginTop: 4,
-  },
-  expandBtnText: { fontSize: 12, color: COLORS.primary, fontWeight: '700', flex: 1 },
-
-  // Facts
-  factsContainer: { marginTop: 10, gap: 10 },
-  factRow:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  factDot:        {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#2A9D6E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  factText: { flex: 1, fontSize: 12, color: COLORS.textPrimary, lineHeight: 19 },
-});
-
-// Tip card styles
-const tc = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    gap: 14,
-    backgroundColor: '#1A6BB5',
-    borderRadius: RADIUS.xl,
-    padding: 16,
-    marginBottom: 4,
-    overflow: 'hidden',
-    position: 'relative',
-    shadowColor: '#208AEF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 28,
-    borderColor: 'rgba(255,255,255,0.08)',
-    bottom: -40,
-    right: -30,
-  },
-  leftCol: { alignItems: 'center', gap: 6 },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: { fontSize: 8, fontWeight: '800', color: 'rgba(255,255,255,0.6)', letterSpacing: 1 },
-  tip: { fontSize: 13, color: '#FFFFFF', lineHeight: 20, marginBottom: 8, fontWeight: '500' },
-  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-  source:    { fontSize: 10, color: 'rgba(255,255,255,0.75)', fontStyle: 'italic', fontWeight: '600' },
-  dotsRow:   { flexDirection: 'row', gap: 4 },
-  dot:       { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
-  dotActive: { backgroundColor: 'rgba(255,255,255,0.9)', width: 12 },
-});
-
-// AI meal card styles
-const ai = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    padding: 18,
-    marginBottom: 4,
-    overflow: 'hidden',
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderLeftWidth: 4,
-    borderLeftColor: '#E67E22',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 28,
-    borderColor: 'rgba(230,126,34,0.05)',
-    bottom: -40,
-    right: -30,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
-  },
-  iconSquare: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.md,
-    backgroundColor: '#E67E22',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#E67E22',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  title:    { fontSize: 14, fontWeight: '800', color: COLORS.textPrimary },
-  subtitle: { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
-  refreshBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-  loadingText: { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic' },
-  body:        { fontSize: 13, color: COLORS.textPrimary, lineHeight: 22 },
-  aiTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  aiTagText: { fontSize: 10, color: COLORS.textMuted, fontStyle: 'italic', flex: 1 },
-});
-
-// Food group checker styles
-const fg = StyleSheet.create({
-  exclusiveBox: {
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: RADIUS.xl,
-    padding: 24,
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  exclusiveIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  exclusiveTitle:  { fontSize: 15, fontWeight: '800', color: COLORS.primary, textAlign: 'center' },
-  exclusiveText:   { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 },
-  exclusiveSourceTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  exclusiveSource: { fontSize: 10, color: '#2A9D6E', fontStyle: 'italic', fontWeight: '600' },
-
-  // Score card
-  scoreCard: {
-    borderRadius: RADIUS.xl,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  scoreTop: { marginBottom: 8 },
-  scoreNumRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    marginBottom: 3,
-  },
-  scoreNum:      { fontSize: 42, fontWeight: '800', lineHeight: 48 },
-  scoreOf:       { fontSize: 20, fontWeight: '500', marginBottom: 2 },
-  scoreBadge:    {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: RADIUS.full,
-    marginLeft: 8,
-    alignSelf: 'center',
-  },
-  scoreBadgeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
-  scoreLabel:     { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
-  scoreMessage:   { fontSize: 12, lineHeight: 18, marginBottom: 12 },
-  mddBar:         { flexDirection: 'row', gap: 5, marginBottom: 8 },
-  mddSegment:     { flex: 1, height: 7, borderRadius: 4 },
-  mddSource:      { fontSize: 10, color: COLORS.textMuted, fontStyle: 'italic' },
-
-  // Food group grid
-  groupsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  groupCard: {
-    width: '47%',
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    position: 'relative',
-    minHeight: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  groupIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  groupName:     { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4, lineHeight: 16 },
-  groupExamples: { fontSize: 10, color: COLORS.textMuted, lineHeight: 14, marginBottom: 4 },
-  groupWhy:      { fontSize: 10, color: COLORS.primary, lineHeight: 14, fontStyle: 'italic' },
-  checkMark: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-  },
+// Skeleton
+const sk = StyleSheet.create({
+  box: { backgroundColor: COLORS.border, borderRadius: RADIUS.xl, marginBottom: 4, opacity: 0.5 },
 });

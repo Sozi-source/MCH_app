@@ -1,4 +1,6 @@
-﻿/**
+﻿function toTitleCase(str: string): string { return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase()); }
+
+/**
  * src/app/(tabs)/index.tsx
  * ZuriHealth — Premium Home Screen
  */
@@ -8,14 +10,14 @@ import { useChildStore } from '@/store/childStore';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 // ── Quick actions ─────────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
   {
     label: 'Growth',
-    icon: 'trending-up' as const,
+    image: require('@/assets/images/action-growth.png'), // growth uses trending-up style
     route: '/(tabs)/growth',
     gradient: ['#208AEF', '#0D6FD8'],
     emoji: '📈',
@@ -23,7 +25,7 @@ const QUICK_ACTIONS = [
   },
   {
     label: 'Vaccines',
-    icon: 'shield-checkmark' as const,
+    image: require('@/assets/images/action-vaccines.png'),
     route: '/(tabs)/vaccines',
     gradient: ['#1D9E75', '#158A62'],
     emoji: '💉',
@@ -31,7 +33,7 @@ const QUICK_ACTIONS = [
   },
   {
     label: 'Milestones',
-    icon: 'ribbon' as const,
+    image: require('@/assets/images/action-milestones.png'),
     route: '/(tabs)/milestones',
     gradient: ['#9C27B0', '#7B1FA2'],
     emoji: '🏆',
@@ -39,7 +41,7 @@ const QUICK_ACTIONS = [
   },
   {
     label: 'Nutrition',
-    icon: 'nutrition' as const,
+    image: require('@/assets/images/action-nutrition.png'),
     route: '/(tabs)/nutrition',
     gradient: ['#FF9800', '#F57C00'],
     emoji: '🥗',
@@ -81,16 +83,11 @@ function getGreeting() {
 // Age progress ring (SVG-like using View borders)
 function AgeRing({ ageMonths, maxMonths = 60 }: { ageMonths: number; maxMonths?: number }) {
   const pct = Math.min(ageMonths / maxMonths, 1);
-  // We simulate a ring with a colored arc using rotation trick
   const size = 80;
   const strokeWidth = 6;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const filled = circumference * pct;
 
   return (
     <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* Background ring */}
       <View style={{
         position: 'absolute',
         width: size, height: size,
@@ -98,7 +95,6 @@ function AgeRing({ ageMonths, maxMonths = 60 }: { ageMonths: number; maxMonths?:
         borderWidth: strokeWidth,
         borderColor: 'rgba(255,255,255,0.2)',
       }} />
-      {/* Progress arc — approximated with gradient border */}
       <View style={{
         position: 'absolute',
         width: size, height: size,
@@ -160,12 +156,9 @@ export default function HomeScreen() {
           <View style={styles.topBarRight}>
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => router.push('/(tabs)/settings')}
+              onPress={() => router.push('/(tabs)/settings' as any)}
             >
-              <Ionicons name="person-circle-outline" size={26} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn} onPress={handleSignOut}>
-              <Ionicons name="log-out-outline" size={24} color="rgba(255,255,255,0.8)" />
+              <Ionicons name="settings-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
@@ -196,7 +189,7 @@ export default function HomeScreen() {
 
             {/* Info */}
             <View style={styles.heroInfo}>
-              <Text style={styles.heroChildName}>{activeChild.full_name}</Text>
+              <Text style={styles.heroChildName}>{toTitleCase(activeChild.full_name)}</Text>
               {activeChild.date_of_birth ? (
                 <>
                   <View style={styles.ageBadge}>
@@ -285,19 +278,20 @@ export default function HomeScreen() {
               onPress={() => router.push(a.route as any)}
               activeOpacity={0.82}
             >
-              {/* Gradient-like background using two-tone */}
               <View style={[styles.actionBg, { backgroundColor: a.gradient[0] }]} />
               <View style={styles.actionContent}>
                 <View style={styles.actionTop}>
                   <View style={styles.actionIconWrap}>
-                    <Ionicons name={a.icon} size={22} color="#fff" />
+                    <Image
+                      source={a.image}
+                      style={{ width: 24, height: 24, resizeMode: 'contain', tintColor: '#fff' }}
+                    />
                   </View>
                   <Text style={styles.actionEmoji}>{a.emoji}</Text>
                 </View>
                 <Text style={styles.actionLabel}>{a.label}</Text>
                 <Text style={styles.actionDesc}>{a.desc}</Text>
               </View>
-              {/* Decorative circle */}
               <View style={[styles.actionDecor, { borderColor: a.gradient[1] }]} />
             </TouchableOpacity>
           ))}
@@ -314,7 +308,10 @@ export default function HomeScreen() {
               onPress={() => router.push('/(tabs)/growth')}
             >
               <View style={[styles.snapshotIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="trending-up" size={20} color="#1565C0" />
+                <Image
+                  source={require('@/assets/tabs/tab-growth-active.png')}
+                  style={{ width: 24, height: 24, resizeMode: 'contain' }}
+                />
               </View>
               <Text style={styles.snapshotLabel}>Growth</Text>
               <Text style={styles.snapshotValue}>Track</Text>
@@ -326,7 +323,10 @@ export default function HomeScreen() {
               onPress={() => router.push('/(tabs)/vaccines')}
             >
               <View style={[styles.snapshotIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="shield-checkmark" size={20} color="#2E7D32" />
+                <Image
+                  source={require('@/assets/tabs/tab-vaccines-active.png')}
+                  style={{ width: 24, height: 24, resizeMode: 'contain' }}
+                />
               </View>
               <Text style={styles.snapshotLabel}>Vaccines</Text>
               <Text style={styles.snapshotValue}>View</Text>
@@ -338,7 +338,10 @@ export default function HomeScreen() {
               onPress={() => router.push('/(tabs)/milestones')}
             >
               <View style={[styles.snapshotIcon, { backgroundColor: '#F3E5F5' }]}>
-                <Ionicons name="ribbon" size={20} color="#7B1FA2" />
+                <Image
+                  source={require('@/assets/tabs/tab-progress-active.png')}
+                  style={{ width: 24, height: 24, resizeMode: 'contain' }}
+                />
               </View>
               <Text style={styles.snapshotLabel}>Milestones</Text>
               <Text style={styles.snapshotValue}>Check</Text>
@@ -369,7 +372,10 @@ export default function HomeScreen() {
       >
         <View style={styles.zuriLeft}>
           <View style={styles.zuriAvatar}>
-            <Ionicons name="sparkles" size={20} color="#fff" />
+            <Image
+              source={require('@/assets/features/feature-zuri-ai.png')}
+              style={{ width: 26, height: 26, resizeMode: 'contain', tintColor: '#fff' }}
+            />
           </View>
           <View>
             <Text style={styles.zuriTitle}>Ask Zuri AI</Text>
@@ -420,10 +426,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
+
+    ...Platform.select({
+
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12 },
+
+      android: { elevation: 10 },
+
+      default: {},
+
+    }),
     elevation: 5,
   },
   heroAvatar: {
@@ -558,10 +570,16 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
+
+    ...Platform.select({
+
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },
+
+      android: { elevation: 5 },
+
+      default: {},
+
+    }),
     elevation: 2,
   },
   snapshotIcon: {
