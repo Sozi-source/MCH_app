@@ -21,10 +21,12 @@ import type * as NotificationsType from 'expo-notifications';
 // ─────────────────────────────────────────────────────────────────────────────
 
 let N: typeof NotificationsType | null = null;
-try {
-  N = require('expo-notifications') as typeof NotificationsType;
-} catch {
-  console.warn('[notificationService] expo-notifications not available — notifications disabled.');
+if (Platform.OS !== 'web') {
+  try {
+    N = require('expo-notifications') as typeof NotificationsType;
+  } catch {
+    console.warn('[notificationService] expo-notifications not available — notifications disabled.');
+  }
 }
 
 type AS = typeof AsyncStorageType;

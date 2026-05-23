@@ -30,10 +30,10 @@ import {
 } from 'react-native';
 
 // ─── PDF export (graceful fallback if not installed) ────────────────────────
-let RNHTMLtoPDF: any = null;
+let Print: any = null;
 let Sharing: any = null;
 try {
-  RNHTMLtoPDF = require('react-native-html-to-pdf').default;
+  Print = require('expo-print');
   Sharing = require('expo-sharing');
 } catch (_) {}
 
@@ -144,10 +144,10 @@ function CoverageRing({ pct }: { pct: number }) {
 
 // ─── PDF generation ───────────────────────────────────────────────────────────
 async function generatePDF(child: any, latest: any, sorted: any[], vaccineStats: any) {
-  if (!RNHTMLtoPDF) {
+  if (!Print) {
     Alert.alert(
       'PDF Export',
-      'Install react-native-html-to-pdf and expo-sharing to enable PDF export.\n\nnpx expo install react-native-html-to-pdf expo-sharing',
+      'Install expo-print and expo-sharing to enable PDF export.\n\nnpx expo install react-native-html-to-pdf expo-sharing',
     );
     return;
   }
@@ -309,17 +309,12 @@ async function generatePDF(child: any, latest: any, sorted: any[], vaccineStats:
 </html>`;
 
   try {
-    const result = await RNHTMLtoPDF.convert({
-      html,
-      fileName: `ZuriHealth_Report_${child.full_name.replace(/\s+/g, '_')}_${Date.now()}`,
-      directory: 'Documents',
-      base64: false,
-    });
+    const result = await Print.printToFileAsync({ html, base64: false });
 
-    if (result?.filePath && Sharing) {
+    if (result?.uri && Sharing) {
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(result.filePath, {
+        await Sharing.shareAsync(result.uri, {
           mimeType: 'application/pdf',
           dialogTitle: `${child.full_name} – Health Report`,
         });

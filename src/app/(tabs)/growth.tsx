@@ -243,9 +243,11 @@ function LatestStatusBanner({ records }: { records: GrowthRecord[] }) {
 function RecordCard({
   rec,
   isLatest,
+  onEdit,
 }: {
   rec: GrowthRecord;
   isLatest: boolean;
+  onEdit: (rec: GrowthRecord) => void;
 }) {
   const t = useT();
   const alerts = getZScoreAlerts(rec.waz, rec.haz, rec.whz, rec.age_months);
@@ -325,6 +327,10 @@ function RecordCard({
           <ZScoreAlertBanner alerts={alerts} />
         </View>
       )}
+      <TouchableOpacity style={rc.editBtn} onPress={() => onEdit(rec)}>
+        <Ionicons name={'create-outline'} size={13} color={COLORS.primary} />
+        <Text style={rc.editBtnText}>Edit record</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -477,6 +483,7 @@ export default function GrowthScreen() {
     growthRecords,
     fetchGrowthRecords,
     addGrowthRecord,
+  updateGrowthRecord,
   } = useChildStore();
 
   const activeChild =
@@ -488,6 +495,7 @@ export default function GrowthScreen() {
   const [showForm,    setShowForm]    = useState(false);
   const [showPicker,  setShowPicker]  = useState(false);
   const [measureDate, setMeasureDate] = useState(new Date());
+  const [editRecord,  setEditRecord]  = useState<GrowthRecord | null>(null);
 
   const ageMonths = activeChild
     ? getAgeMonthsFromDates(activeChild.date_of_birth, measureDate)
@@ -496,6 +504,14 @@ export default function GrowthScreen() {
   useEffect(() => {
     if (activeChild?.id) fetchGrowthRecords(activeChild.id);
   }, [activeChild?.id]);
+
+  const handleEdit = (rec: import('@/store/childStore').GrowthRecord) => {
+    setEditRecord(rec);
+    setWeight(String(rec.weight_kg));
+    setHeight(rec.height_cm ? String(rec.height_cm) : '');
+    setMeasureDate(new Date(rec.date));
+    setShowForm(true);
+  };
 
   const handleAdd = async () => {
     if (!activeChild) return;
@@ -524,7 +540,7 @@ export default function GrowthScreen() {
     setLoading(true);
     try {
       const zscores = await calculateZScores(w, h, ageMonths, activeChild.sex);
-      await addGrowthRecord({
+      const recordData = {
         child_id:   activeChild.id,
         weight_kg:  w,
         height_cm:  h,
@@ -533,7 +549,13 @@ export default function GrowthScreen() {
         haz:        zscores.haz,
         whz:        zscores.whz,
         date:       measureDate.toISOString().split('T')[0],
-      });
+      };
+      if (editRecord) {
+        await updateGrowthRecord(editRecord.id, recordData);
+        setEditRecord(null);
+      } else {
+        await addGrowthRecord(recordData);
+      }
 
       setWeight('');
       setHeight('');
@@ -807,7 +829,7 @@ export default function GrowthScreen() {
           </View>
         ) : (
           growthRecords.map((rec, i) => (
-            <RecordCard key={rec.id} rec={rec} isLatest={i === 0} />
+            <RecordCard key={rec.id} rec={rec} isLatest={i === 0} onEdit={handleEdit} />
           ))
         )}
 
@@ -1156,6 +1178,8 @@ const rc = StyleSheet.create({
   zChipLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textMuted, marginBottom: 3 },
   zChipVal:   { fontSize: 16, fontWeight: '800' },
   zChipStatus:{ fontSize: 9, fontWeight: '700', marginTop: 2, textAlign: 'center' },
+  editBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  editBtnText:{ fontSize: 12, color: COLORS.primary, fontWeight: '600' },
 });
 
 // ─── Add form styles ──────────────────────────────────────────────

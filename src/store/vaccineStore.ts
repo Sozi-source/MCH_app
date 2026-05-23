@@ -124,7 +124,10 @@ function findImmunization(
   schedule: VaccineSchedule,
   dueDate: Date | null,
 ): Immunization | null {
-  const candidates = immunizations.filter(i => i.vaccine_name === schedule.vaccine_name);
+  const candidates = immunizations.filter(i =>
+    i.vaccine_name === schedule.vaccine_name &&
+    (i.dose_number === undefined || i.dose_number === null || i.dose_number === schedule.dose_number)
+  );
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
   if (!dueDate) return candidates[0];
@@ -265,6 +268,7 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
       const { error } = await supabase.from('immunizations').insert({
         child_id:       childId,
         vaccine_name:   schedule.vaccine_name,
+        dose_number:    schedule.dose_number,
         scheduled_date: scheduledDateStr,
         given_date:     givenDateStr,
         facility:       facilityName ?? null,
@@ -311,6 +315,7 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
       const { error } = await supabase.from('immunizations').insert({
         child_id:       childId,
         vaccine_name:   schedule.vaccine_name,
+        dose_number:    schedule.dose_number,
         scheduled_date: toDateStr(dueDate),
         given_date:     null,
         facility:       null,

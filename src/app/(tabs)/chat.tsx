@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ZuriHealth — Premium Chat Screen
  *
  * AI CONTEXT AUDIT FINDINGS & FIXES:
@@ -22,6 +22,7 @@ import { useChildStore } from '@/store/childStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useVaccineStore } from '@/store/vaccineStore';
 import { getZScoreDisplay, getFeedingStage } from '@/lib/nutritionData';
+import { supabase } from '@/lib/supabase';
 import type { GrowthRecord } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
@@ -102,6 +103,12 @@ interface ChildContext {
   feedingStageDescription: string;
   feedingExtra: string;       // meals/day + food groups as a single formatted string
 
+  milestonesTotal: number;
+  milestonesAchieved: number;
+  milestonesInProgress: number;
+  achievedMilestoneTitles: string[];
+  inProgressMilestoneTitles: string[];
+
   language: string;
 }
 
@@ -143,6 +150,16 @@ function buildSystemPrompt(ctx: ChildContext): string {
   - Upcoming: ${ctx.vaccineUpcoming}`;
   }
 
+  let milestoneSection = 'No milestone data recorded yet.';
+  if (ctx.milestonesTotal > 0) {
+    const pct = Math.round((ctx.milestonesAchieved / ctx.milestonesTotal) * 100);
+    const achievedList   = ctx.achievedMilestoneTitles.length ? ctx.achievedMilestoneTitles.join(', ') : 'none recorded';
+    const inProgressList = ctx.inProgressMilestoneTitles.length ? ctx.inProgressMilestoneTitles.join(', ') : 'none';
+    milestoneSection = `Overall: ${ctx.milestonesAchieved}/${ctx.milestonesTotal} achieved (${pct}%)
+  - In progress      : ${inProgressList}
+  - Recently achieved: ${achievedList}`;
+  }
+
   const birthInfo = [
     ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg} kg`         : null,
     ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm} cm`          : null,
@@ -170,6 +187,9 @@ ${vaccineSection}
 Stage : ${ctx.feedingStageLabel}
 ${ctx.feedingStageDescription}
 ${ctx.feedingExtra}
+
+-- DEVELOPMENTAL MILESTONES --
+${milestoneSection}
 ════════════════════════════════════════════
 
 LANGUAGE: Respond in ${ctx.language === 'sw' ? 'Swahili' : 'English'} unless the mother writes in the other language, then match her language.
@@ -329,6 +349,42 @@ export default function ChatScreen() {
     return (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
   };
 
+  const [milestoneData, setMilestoneData] = React.useState<{
+    total: number; achieved: number; inProgress: number;
+    achievedTitles: string[]; inProgressTitles: string[];
+  }>({ total: 0, achieved: 0, inProgress: 0, achievedTitles: [], inProgressTitles: [] });
+
+  const MILESTONE_TITLES: Record<string, string> = {
+    m_2_mot_1: 'Holds head up briefly',       m_2_lan_1: 'Makes cooing sounds',
+    m_2_soc_1: 'Social smile',                m_2_cog_1: 'Follows object with eyes',
+    m_4_mot_1: 'Holds head steady',           m_4_mot_2: 'Pushes up on arms',
+    m_4_lan_1: 'Laughs and squeals',          m_4_soc_1: 'Recognises familiar faces',
+    m_4_cog_1: 'Reaches for objects',         m_6_mot_1: 'Sits with support',
+    m_6_mot_2: 'Rolls both ways',             m_6_lan_1: 'Babbles consonants',
+    m_6_soc_1: 'Knows familiar vs strangers', m_6_cog_1: 'Explores with mouth and hands',
+    m_9_mot_1: 'Sits without support',        m_9_mot_2: 'Crawls or scoots',
+    m_9_lan_1: 'Says mama / dada',            m_9_soc_1: 'Plays peek-a-boo',
+    m_9_cog_1: 'Object permanence',           m_12_mot_1: 'Pulls to stand',
+    m_12_mot_2: 'Cruises along furniture',    m_12_lan_1: 'First words',
+    m_12_soc_1: 'Waves bye-bye',              m_12_cog_1: 'Imitates actions',
+    m_12_cog_2: 'Uses pincer grasp',          m_18_mot_1: 'Walks independently',
+    m_18_mot_2: 'Climbs onto furniture',      m_18_lan_1: 'Uses 10-20 words',
+    m_18_soc_1: 'Parallel play',              m_18_cog_1: 'Points to named body parts',
+    m_24_mot_1: 'Runs steadily',              m_24_mot_2: 'Kicks a ball',
+    m_24_lan_1: 'Two-word phrases',           m_24_lan_2: '50+ word vocabulary',
+    m_24_soc_1: 'Plays with others briefly',  m_24_cog_1: 'Sorts shapes and colours',
+    m_24_cog_2: 'Simple pretend play',        m_36_mot_1: 'Jumps with both feet',
+    m_36_mot_2: 'Climbs stairs alternating',  m_36_lan_1: '3-word sentences',
+    m_36_soc_1: 'Takes turns in games',       m_36_cog_1: 'Knows own name and age',
+    m_36_cog_2: 'Draws a circle',             m_48_mot_1: 'Hops on one foot',
+    m_48_mot_2: 'Catches a bounced ball',     m_48_lan_1: 'Tells simple stories',
+    m_48_soc_1: 'Cooperative play',           m_48_cog_1: 'Counts to 10',
+    m_48_cog_2: 'Draws a person',             m_60_mot_1: 'Skips and hops well',
+    m_60_mot_2: 'Writes own name',            m_60_lan_1: 'Uses full sentences',
+    m_60_lan_2: 'Asks why questions',         m_60_soc_1: 'Follows rules in games',
+    m_60_cog_1: 'Counts to 20+',              m_60_cog_2: 'Knows letters of alphabet',
+  };
+
   useEffect(() => {
     if (!activeChild?.id) return;
     fetchGrowthRecords(activeChild.id);
@@ -336,6 +392,26 @@ export default function ChatScreen() {
       if (schedules.length === 0) await fetchSchedules();
       const imms = await fetchImmunizations(activeChild.id);
       computeRows(activeChild.date_of_birth, imms);
+    })();
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('child_milestones')
+          .select('milestone_id, status')
+          .eq('child_id', activeChild.id);
+        const records = data ?? [];
+        const achieved   = records.filter((r: any) => r.status === 'achieved');
+        const inProgress = records.filter((r: any) => r.status === 'in_progress');
+        setMilestoneData({
+          total: 54,
+          achieved: achieved.length,
+          inProgress: inProgress.length,
+          achievedTitles:   achieved.slice(0, 10).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
+          inProgressTitles: inProgress.slice(0, 5).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
+        });
+      } catch (e) {
+        console.warn('[chat] milestone fetch failed', e);
+      }
     })();
   }, [activeChild?.id]);
 
@@ -403,6 +479,12 @@ export default function ChatScreen() {
       feedingStageLabel:       feedingStage?.stage        ?? `${ageMonths} months`,
       feedingStageDescription: feedingStage?.breastfeeding ?? feedingStage?.mealsPerDay ?? '',
       feedingExtra:            feedingParts.join('\n'),
+
+      milestonesTotal:           milestoneData.total,
+      milestonesAchieved:        milestoneData.achieved,
+      milestonesInProgress:      milestoneData.inProgress,
+      achievedMilestoneTitles:   milestoneData.achievedTitles,
+      inProgressMilestoneTitles: milestoneData.inProgressTitles,
 
       language,
     };

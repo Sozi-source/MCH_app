@@ -31,6 +31,14 @@ function getAgeString(dob: string): string {
   return rem > 0 ? `${years} yr ${rem} mo` : `${years} year${years !== 1 ? 's' : ''}`;
 }
 
+// ── Milestone summary types ───────────────────────────────────────────────────
+
+interface MilestoneSummary {
+  total: number;
+  achieved: number;
+  inProgress: number;
+}
+
 export default function ChildDetailScreen() {
   const t = useT();
   const router = useRouter();
@@ -47,6 +55,10 @@ export default function ChildDetailScreen() {
   const [coParentLoading, setCoParentLoading] = useState(false);
   const [coParentError, setCoParentError] = useState('');
 
+  // ── Milestone summary state ───────────────────────────────────────────────
+  const [milestoneSummary, setMilestoneSummary] = useState<MilestoneSummary | null>(null);
+  const [loadingMilestones, setLoadingMilestones] = useState(false);
+
   useEffect(() => {
     const found = children.find(c => c.id === id);
     if (found) {
@@ -54,6 +66,7 @@ export default function ChildDetailScreen() {
       setLoadingGrowth(true);
       fetchGrowthRecords(found.id).finally(() => setLoadingGrowth(false));
       fetchSecondParent(found);
+      fetchMilestoneSummary(found.id);
     }
   }, [id, children]);
 
@@ -71,15 +84,37 @@ export default function ChildDetailScreen() {
     }
   };
 
+  // ── Fetch milestone summary from child_milestones ─────────────────────────
+  const fetchMilestoneSummary = async (childId: string) => {
+    setLoadingMilestones(true);
+    try {
+      const { data } = await supabase
+        .from('child_milestones')
+        .select('status')
+        .eq('child_id', childId);
+
+      const records = data ?? [];
+      // MILESTONE_DATA has 54 milestones total (hardcoded in milestones.tsx)
+      const TOTAL_MILESTONES = 54;
+      const achieved   = records.filter((r: any) => r.status === 'achieved').length;
+      const inProgress = records.filter((r: any) => r.status === 'in_progress').length;
+
+      setMilestoneSummary({ total: TOTAL_MILESTONES, achieved, inProgress });
+    } catch (e) {
+      console.error('fetchMilestoneSummary error', e);
+    } finally {
+      setLoadingMilestones(false);
+    }
+  };
+
   const handleAddCoParent = async () => {
     setCoParentError('');
     if (!coParentEmail.trim()) { setCoParentError('Please enter an email address.'); return; }
     setCoParentLoading(true);
 
-    // Look up the parent by email
     const { data: parent2, error } = await supabase
-    .rpc('find_parent_by_email', { search_email: coParentEmail.trim() })
-    .single();
+      .rpc('find_parent_by_email', { search_email: coParentEmail.trim() })
+      .single();
 
     if (error || !parent2) {
       setCoParentError('No account found with that email. They need to register first.');
@@ -87,7 +122,6 @@ export default function ChildDetailScreen() {
       return;
     }
 
-    // Link as second parent
     const { error: updateErr } = await supabase
       .from('children')
       .update({ second_parent_id: parent2.id })
@@ -168,6 +202,7 @@ export default function ChildDetailScreen() {
           )}
         </View>
 
+        {/* Child Details */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Child Details</Text>
           <InfoRow icon="calendar-outline" label="Date of Birth"
@@ -209,6 +244,7 @@ export default function ChildDetailScreen() {
           )}
         </View>
 
+        {/* Growth Tracker */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Growth Tracker</Text>
           {loadingGrowth ? (
@@ -240,6 +276,64 @@ export default function ChildDetailScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ── Milestones Summary Card ───────────────────────────────────────── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Developmental Milestones</Text>
+          {loadingMilestones ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 16 }} />
+          ) : milestoneSummary ? (
+            <View>
+              <View style={styles.milestoneRow}>
+                {/* Achieved */}
+                <View style={styles.milestoneStat}>
+                  <Text style={[styles.milestoneValue, { color: '#1D9E75' }]}>
+                    {milestoneSummary.achieved}
+                  </Text>
+                  <Text style={styles.milestoneLabel}>Achieved</Text>
+                </View>
+                {/* In Progress */}
+                <View style={styles.milestoneStat}>
+                  <Text style={[styles.milestoneValue, { color: COLORS.due }]}>
+                    {milestoneSummary.inProgress}
+                  </Text>
+                  <Text style={styles.milestoneLabel}>In Progress</Text>
+                </View>
+                {/* Total */}
+                <View style={styles.milestoneStat}>
+                  <Text style={[styles.milestoneValue, { color: COLORS.textPrimary }]}>
+                    {milestoneSummary.total}
+                  </Text>
+                  <Text style={styles.milestoneLabel}>Total</Text>
+                </View>
+              </View>
+              {/* Progress bar */}
+              <View style={styles.milestoneBarBg}>
+                <View
+                  style={[
+                    styles.milestoneBarFill,
+                    {
+                      width: `${Math.round((milestoneSummary.achieved / milestoneSummary.total) * 100)}%` as any,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.milestonePct}>
+                {Math.round((milestoneSummary.achieved / milestoneSummary.total) * 100)}% complete
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>No milestone data yet</Text>
+          )}
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => { selectChild(child.id); router.push('/(tabs)/milestones' as any); }}
+          >
+            <Ionicons name="ribbon-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.actionBtnText}>View all milestones</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick Actions */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Quick Actions</Text>
           <TouchableOpacity style={styles.quickLink}
@@ -249,6 +343,12 @@ export default function ChildDetailScreen() {
             <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickLink}
+            onPress={() => { selectChild(child.id); router.push('/(tabs)/milestones' as any); }}>
+            <Ionicons name="ribbon-outline" size={20} color={COLORS.primary} />
+            <Text style={styles.quickLinkText}>Milestones</Text>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickLink, { borderBottomWidth: 0 }]}
             onPress={() => { selectChild(child.id); router.push('/(tabs)/chat' as any); }}>
             <Ionicons name="chatbubble-outline" size={20} color={COLORS.primary} />
             <Text style={styles.quickLinkText}>AI Chat</Text>
@@ -324,7 +424,7 @@ const styles = StyleSheet.create({
   infoIcon:         { marginRight: 12, marginTop: 2 },
   infoLabel:        { fontSize: 11, color: COLORS.textMuted, fontWeight: '500', marginBottom: 2 },
   infoValue:        { fontSize: 14, color: COLORS.textPrimary, fontWeight: '600' },
-  // Co-parent styles
+  // Co-parent
   coParentRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   coParentAvatar:   { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
   coParentAvatarText: { fontSize: 18, fontWeight: '800', color: COLORS.primary },
@@ -334,17 +434,26 @@ const styles = StyleSheet.create({
   removeBtn:        { padding: 8 },
   addCoParentBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 10, alignSelf: 'flex-start' },
   addCoParentBtnText: { fontSize: 14, color: COLORS.primary, fontWeight: '600' },
-  // Growth styles
+  // Growth
   growthRow:        { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12 },
   growthStat:       { alignItems: 'center' },
   growthValue:      { fontSize: 20, fontWeight: '700', color: COLORS.primary },
   growthLabel:      { fontSize: 11, color: COLORS.textMuted, marginTop: 4 },
+  // Milestones
+  milestoneRow:     { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12 },
+  milestoneStat:    { alignItems: 'center' },
+  milestoneValue:   { fontSize: 20, fontWeight: '700' },
+  milestoneLabel:   { fontSize: 11, color: COLORS.textMuted, marginTop: 4 },
+  milestoneBarBg:   { height: 6, backgroundColor: COLORS.border, borderRadius: 3, marginTop: 8, overflow: 'hidden' },
+  milestoneBarFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 3 },
+  milestonePct:     { fontSize: 11, color: COLORS.textMuted, marginTop: 6, textAlign: 'right' },
+  // Shared
   emptyText:        { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', paddingVertical: 12 },
   actionBtn:        { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
   actionBtnText:    { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
   quickLink:        { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   quickLinkText:    { flex: 1, fontSize: 14, color: COLORS.textPrimary, fontWeight: '500' },
-  // Modal styles
+  // Modal
   modalOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalCard:        { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   modalHeader:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },

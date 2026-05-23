@@ -1,4 +1,4 @@
-/**
+﻿/**
  * src/store/childStore.ts
  *
  * NOTIFICATION UPGRADE:
@@ -32,6 +32,7 @@ interface ChildState {
   selectChild:       (id: string) => void;
   fetchGrowthRecords:(childId: string) => Promise<void>;
   addGrowthRecord:   (record: Omit<GrowthRecord, 'id'>) => Promise<void>;
+  updateGrowthRecord: (id: string, record: Partial<Omit<GrowthRecord, 'id'>>) => Promise<void>;
 }
 
 export const useChildStore = create<ChildState>((set, get) => ({
@@ -125,6 +126,21 @@ export const useChildStore = create<ChildState>((set, get) => ({
           console.warn('[childStore] notifyGrowthAlerts failed:', err),
         );
       }
+    }
+  },
+
+  updateGrowthRecord: async (id, record) => {
+    const { data } = await supabase
+      .from('growth_records')
+      .update(record)
+      .eq('id', id)
+      .select()
+      .single();
+    if (data) {
+      const updated = data as GrowthRecord;
+      set((state) => ({
+        growthRecords: state.growthRecords.map(r => r.id === id ? updated : r),
+      }));
     }
   },
 }));
