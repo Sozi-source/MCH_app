@@ -1,22 +1,7 @@
 ﻿/**
  * ZuriHealth — Premium Chat Screen
- *
- * AI CONTEXT AUDIT FINDINGS & FIXES:
- * ✅ Demographics: name, age, sex, DOB, birth weight/height, facility — COMPLETE
- * ✅ Growth: latest weight, height, WAZ/HAZ/WHZ z-scores — COMPLETE
- * ✅ Vaccines: given/due/missed/upcoming counts + names — COMPLETE
- * ✅ Feeding stage: label + description — COMPLETE
- * ✅ Language switching (Swahili/English) — COMPLETE
- *
- * GAPS FIXED:
- * ✅ Growth history trend (last 3 records weight delta) — ADDED
- * ✅ Feeding meals/day + food groups forwarded to AI — ADDED
- * ✅ Personalised suggestion chips based on child's actual status — ADDED
- *
- * NOTE: Milestones context omitted until milestoneStore exposes the data.
- * NOTE: Child.notes not in canonical type — omitted cleanly.
+ * With rich message rendering (parsed sections, styled bullets, source badge)
  */
-
 import { COLORS, RADIUS } from '@/lib/theme';
 import { useChildStore } from '@/store/childStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -26,7 +11,8 @@ import { supabase } from '@/lib/supabase';
 import type { GrowthRecord } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image,
+import {
+  Image,
   ActivityIndicator,
   Animated,
   Dimensions,
@@ -42,10 +28,6 @@ import { Image,
 } from 'react-native';
 
 const { width: W } = Dimensions.get('window');
-
-// ─────────────────────────────────────────────────────────────────────────────
-// API config
-// ─────────────────────────────────────────────────────────────────────────────
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
@@ -63,7 +45,6 @@ interface Message {
 }
 
 interface ChildContext {
-  // Demographics
   name: string;
   ageMonths: number;
   sex: string;
@@ -71,8 +52,6 @@ interface ChildContext {
   birthWeightKg: number | undefined;
   birthHeightCm: number | undefined;
   healthFacility: string | undefined;
-
-  // Growth — latest
   latestWeight: number | null;
   latestHeight: number | null;
   latestAgeAtMeasure: number | null;
@@ -84,12 +63,8 @@ interface ChildContext {
   heightStatus: string | null;
   whStatus: string | null;
   totalGrowthRecords: number;
-
-  // Growth — trend
   weightTrendKg: number[];
   weightTrendDates: string[];
-
-  // Vaccines
   vaccineGiven: number;
   vaccineDue: number;
   vaccineMissed: number;
@@ -97,19 +72,107 @@ interface ChildContext {
   vaccineTotal: number;
   dueVaccineNames: string[];
   missedVaccineNames: string[];
-
-  // Feeding
   feedingStageLabel: string;
   feedingStageDescription: string;
-  feedingExtra: string;       // meals/day + food groups as a single formatted string
-
+  feedingExtra: string;
   milestonesTotal: number;
   milestonesAchieved: number;
   milestonesInProgress: number;
   achievedMilestoneTitles: string[];
   inProgressMilestoneTitles: string[];
-
   language: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Message parser — splits AI text into answer / bullets / source
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ParsedMessage {
+  answer: string;
+  bullets: string[];
+  source: string | null;
+  emergency: boolean;
+}
+
+function parseAIMessage(raw: string): ParsedMessage {
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const bullets: string[] = [];
+  const answerLines: string[] = [];
+  let source: string | null = null;
+  let emergency = false;
+
+  for (const line of lines) {
+    if (/EMERGENCY|999|go to the nearest hospital/i.test(line)) emergency = true;
+
+    // Source line
+    if (/^(Source:|📚|_Source)/i.test(line)) {
+      source = line.replace(/^(Source:|📚|_Source:?)\s*/i, '').replace(/_/g, '').trim();
+      continue;
+    }
+    // Bullet lines — starts with -, *, •, or numbered like "1."
+    if (/^[-*•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+      bullets.push(line.replace(/^[-*•\d.]\s+/, '').trim());
+      continue;
+    }
+    answerLines.push(line);
+  }
+
+  return {
+    answer: answerLines.join(' ').trim(),
+    bullets,
+    source,
+    emergency,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rich AI bubble renderer
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }) {
+  const parsed = parseAIMessage(content);
+
+  return (
+    <View style={rb.card}>
+      {/* Emergency banner */}
+      {parsed.emergency && (
+        <View style={rb.emergencyBanner}>
+          <Ionicons name="warning" size={14} color="#fff" />
+          <Text style={rb.emergencyText}>EMERGENCY — Go to hospital NOW or call 999</Text>
+        </View>
+      )}
+
+      {/* Main answer */}
+      {parsed.answer.length > 0 && (
+        <Text style={rb.answerText}>{parsed.answer}</Text>
+      )}
+
+      {/* Action bullets */}
+      {parsed.bullets.length > 0 && (
+        <View style={rb.bulletsSection}>
+          <Text style={rb.bulletsSectionLabel}>What to do</Text>
+          {parsed.bullets.map((b, i) => (
+            <View key={i} style={rb.bulletRow}>
+              <View style={rb.bulletDot}>
+                <Text style={rb.bulletDotText}>{i + 1}</Text>
+              </View>
+              <Text style={rb.bulletText}>{b}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Source badge */}
+      {parsed.source && (
+        <View style={rb.sourceBadge}>
+          <Ionicons name="book-outline" size={11} color={COLORS.primary} />
+          <Text style={rb.sourceText}>{parsed.source}</Text>
+        </View>
+      )}
+
+      <Text style={rb.timeText}>{timeStr}</Text>
+    </View>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -117,120 +180,71 @@ interface ChildContext {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(ctx: ChildContext): string {
-  // Growth section
   let growthSection = 'No growth measurements recorded yet.';
   if (ctx.latestWeight != null) {
     const wazLabel = ctx.waz != null ? getZScoreDisplay(ctx.waz).label : 'N/A';
     const hazLabel = ctx.haz != null ? getZScoreDisplay(ctx.haz).label : 'N/A';
     const whzLabel = ctx.whz != null ? getZScoreDisplay(ctx.whz).label : 'N/A';
-
     let trendNote = '';
     if (ctx.weightTrendKg.length >= 2) {
       const diff = ctx.weightTrendKg[ctx.weightTrendKg.length - 1] - ctx.weightTrendKg[0];
       const sign = diff >= 0 ? '+' : '';
       trendNote = `\n  - Weight trend (last ${ctx.weightTrendKg.length} records): ${sign}${diff.toFixed(2)} kg — ${diff >= 0 ? 'gaining' : 'losing'} weight`;
     }
-
-    growthSection = `Latest measurement (${ctx.latestMeasureDate ?? 'unknown date'}, age ${ctx.latestAgeAtMeasure ?? ctx.ageMonths} months):
-  - Weight : ${ctx.latestWeight} kg   (WAZ ${ctx.waz != null ? ctx.waz.toFixed(2) : 'N/A'} → ${wazLabel})
-  - Height : ${ctx.latestHeight != null ? ctx.latestHeight + ' cm' : 'not recorded'}   (HAZ ${ctx.haz != null ? ctx.haz.toFixed(2) : 'N/A'} → ${hazLabel})
-  - WHZ    : ${ctx.whz != null ? ctx.whz.toFixed(2) : 'N/A'} → ${whzLabel}
-  - WHO classifications: weight=${ctx.weightStatus ?? 'N/A'}, height=${ctx.heightStatus ?? 'N/A'}, wh=${ctx.whStatus ?? 'N/A'}
-  - Total records in app: ${ctx.totalGrowthRecords}${trendNote}`;
+    growthSection = `Latest (${ctx.latestMeasureDate ?? 'unknown'}, age ${ctx.latestAgeAtMeasure ?? ctx.ageMonths}mo):
+  - Weight: ${ctx.latestWeight}kg (WAZ ${ctx.waz?.toFixed(2) ?? 'N/A'} = ${wazLabel})
+  - Height: ${ctx.latestHeight != null ? ctx.latestHeight + 'cm' : 'not recorded'} (HAZ ${ctx.haz?.toFixed(2) ?? 'N/A'} = ${hazLabel})
+  - WHZ: ${ctx.whz?.toFixed(2) ?? 'N/A'} = ${whzLabel}${trendNote}`;
   }
 
-  // Vaccine section
   let vaccineSection = 'No vaccine data loaded yet.';
   if (ctx.vaccineTotal > 0) {
-    const dueList    = ctx.dueVaccineNames.length    ? ctx.dueVaccineNames.join(', ')    : 'none';
-    const missedList = ctx.missedVaccineNames.length ? ctx.missedVaccineNames.join(', ') : 'none';
-    vaccineSection = `Coverage: ${ctx.vaccineGiven}/${ctx.vaccineTotal} given (${Math.round((ctx.vaccineGiven / ctx.vaccineTotal) * 100)}%)
-  - Due NOW : ${dueList}
-  - Missed  : ${missedList}
-  - Upcoming: ${ctx.vaccineUpcoming}`;
+    vaccineSection = `${ctx.vaccineGiven}/${ctx.vaccineTotal} given | Due: ${ctx.dueVaccineNames.join(', ') || 'none'} | Missed: ${ctx.missedVaccineNames.join(', ') || 'none'}`;
   }
 
-  let milestoneSection = 'No milestone data recorded yet.';
+  let milestoneSection = 'No milestone data yet.';
   if (ctx.milestonesTotal > 0) {
-    const pct = Math.round((ctx.milestonesAchieved / ctx.milestonesTotal) * 100);
-    const achievedList   = ctx.achievedMilestoneTitles.length ? ctx.achievedMilestoneTitles.join(', ') : 'none recorded';
-    const inProgressList = ctx.inProgressMilestoneTitles.length ? ctx.inProgressMilestoneTitles.join(', ') : 'none';
-    milestoneSection = `Overall: ${ctx.milestonesAchieved}/${ctx.milestonesTotal} achieved (${pct}%)
-  - In progress      : ${inProgressList}
-  - Recently achieved: ${achievedList}`;
+    milestoneSection = `${ctx.milestonesAchieved}/${ctx.milestonesTotal} achieved`;
   }
 
   const birthInfo = [
-    ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg} kg`         : null,
-    ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm} cm`          : null,
-    ctx.healthFacility ? `registered facility: ${ctx.healthFacility}`   : null,
+    ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg}kg`        : null,
+    ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm}cm`         : null,
+    ctx.healthFacility ? `facility: ${ctx.healthFacility}`            : null,
   ].filter(Boolean).join(', ');
 
-  return `You are Zuri, a trusted maternal and child health assistant by ZuriHealth, built for Kenyan mothers. You are kind, clear, and culturally sensitive.
+  return `You are Zuri, a trusted maternal and child health assistant by ZuriHealth, built for Kenyan mothers.
 
-════════════════════════════════════════════
-ACTIVE CHILD — FULL HEALTH PROFILE
-════════════════════════════════════════════
-Name  : ${ctx.name}
-DOB   : ${ctx.dobStr}
-Age   : ${ctx.ageMonths} months
-Sex   : ${ctx.sex}
-${birthInfo ? 'Extra info: ' + birthInfo : ''}
+CHILD PROFILE:
+Name: ${ctx.name} | Age: ${ctx.ageMonths}mo | Sex: ${ctx.sex} | DOB: ${ctx.dobStr}
+${birthInfo ? birthInfo : ''}
+Growth: ${growthSection}
+Vaccines: ${vaccineSection}
+Feeding: ${ctx.feedingStageLabel} — ${ctx.feedingStageDescription} ${ctx.feedingExtra}
+Milestones: ${milestoneSection}
 
-── GROWTH STATUS ──
-${growthSection}
+LANGUAGE: ${ctx.language === 'sw' ? 'Respond in Swahili' : 'Respond in English'}. Match the mother's language if she switches.
 
-── VACCINE STATUS (Kenya KEPI) ──
-${vaccineSection}
+RESPONSE FORMAT — always follow this exact structure:
+[1-3 sentence direct answer in plain language]
 
-── FEEDING STAGE ──
-Stage : ${ctx.feedingStageLabel}
-${ctx.feedingStageDescription}
-${ctx.feedingExtra}
+- [practical step 1]
+- [practical step 2]
+- [practical step 3 if needed]
 
--- DEVELOPMENTAL MILESTONES --
-${milestoneSection}
-════════════════════════════════════════════
+Source: [specific guideline name and year]
 
-LANGUAGE: Respond in ${ctx.language === 'sw' ? 'Swahili' : 'English'} unless the mother writes in the other language, then match her language.
-
-IMPORTANT — USE THE PROFILE ABOVE:
-- Reference actual z-scores and classifications when asked about growth.
-- Reference exact due/missed vaccine names when asked about vaccines.
-- Reference the feeding stage and food groups for the child's exact age.
-- If the profile shows a concern (WAZ < -2, missed vaccine, WHZ indicating MAM/SAM), acknowledge it proactively when relevant.
-- Never ask for information already present in the profile.
-
-YOUR KNOWLEDGE IS STRICTLY LIMITED TO:
-1. WHO IYCF Guidelines  2. WHO Child Growth Standards (2006)  3. WHO IMCI
-4. WHO Pocket Book of Hospital Care for Children  5. WHO Caring for Newborns
-6. WHO Complementary Feeding Counselling Guide  7. WHO Vitamin & Mineral Nutrition
-8. UNICEF IYCF Counselling Cards  9. UNICEF Programming Guide – IYCF
-10. Kenya KEPI Immunization Schedule  11. Kenya KEPH  12. Kenya MCH Handbook
-13. Kenya National Nutrition Action Plan  14. Kenya KIMNCI
-15. Nelson Textbook of Pediatrics (21st Ed.)  16. Krause's Food & Nutrition Care
-17. Williams Obstetrics  18. Myles Textbook for Midwives
-19. USAID IYCF Guidelines  20. Lancet Breastfeeding Series  21. AAP Breastfeeding Guidelines
-
-STRICT RULES:
-1. Only use the verified sources above. Never reference internet, social media, or unverified remedies.
-2. Always cite the guideline or source (e.g. "According to WHO IMCI...").
-3. Keep answers concise, practical, and easy for a mother to understand.
-4. If a question requires physical examination or is outside these sources: say "I recommend visiting your nearest MCH clinic or hospital."
-5. Never suggest traditional/herbal medicine, unverified remedies, or medication dosages.
-6. For personalised nutrition plans or therapeutic feeding: say "Please consult a certified nutritionist at your nearest MCH clinic."
-7. For danger signs (difficulty breathing, seizures, severe dehydration, fever in newborn under 2 months): say "This is an EMERGENCY. Go to the nearest hospital NOW or call 999."
-8. End serious health responses with: "Please confirm this with your MCH nurse or doctor."
-9. Be warm and encouraging — mothers are doing their best.
-
-TOPICS YOU CAN HELP WITH:
-Breastfeeding · complementary feeding · child growth & z-score concerns ·
-Kenya KEPI vaccines & missed vaccines · IYCF food groups by age ·
-newborn care · common childhood illnesses · nutrition for mothers · child development
-
-TOPICS YOU MUST DECLINE:
-Medication names/dosages · disease diagnosis · personalised nutrition prescriptions ·
-anything not covered by the verified sources above`;
+RULES:
+- Under 150 words total. Direct, warm, no jargon.
+- Use the child's actual name and real data from the profile above.
+- If WAZ < -2, missed vaccines, or WHZ shows MAM/SAM — acknowledge it proactively.
+- Never ask for info already in the profile.
+- Only use: WHO IYCF Guidelines, WHO Child Growth Standards 2006, WHO IMCI, Kenya KEPI Schedule, Kenya MCH Handbook, Kenya KIMNCI, Nelson Pediatrics 21st Ed, UNICEF IYCF Cards.
+- No medication dosages, no diagnosis, no herbal remedies.
+- For danger signs (difficulty breathing, seizures, severe dehydration, newborn fever): start with "EMERGENCY — Go to the nearest hospital NOW or call 999."
+- End serious symptom responses with: "Please confirm this with your MCH nurse or doctor."
+- Refer nutrition prescriptions to MCH nutritionist.
+- Physical exam needed: "I recommend visiting your nearest MCH clinic."`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,7 +255,6 @@ function TypingDots() {
   const d0 = useRef(new Animated.Value(0.3)).current;
   const d1 = useRef(new Animated.Value(0.3)).current;
   const d2 = useRef(new Animated.Value(0.3)).current;
-
   useEffect(() => {
     const anim = (dot: Animated.Value, delay: number) =>
       Animated.loop(
@@ -251,11 +264,8 @@ function TypingDots() {
           Animated.timing(dot, { toValue: 0.3, duration: 350, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
         ])
       ).start();
-    anim(d0, 0);
-    anim(d1, 150);
-    anim(d2, 300);
+    anim(d0, 0); anim(d1, 150); anim(d2, 300);
   }, []);
-
   return (
     <View style={b.aiRow}>
       <View style={b.avatar}>
@@ -264,10 +274,7 @@ function TypingDots() {
       <View style={b.aiBubble}>
         <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center', paddingVertical: 2 }}>
           {[d0, d1, d2].map((d, i) => (
-            <Animated.View
-              key={i}
-              style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.primary, opacity: d }}
-            />
+            <Animated.View key={i} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.primary, opacity: d }} />
           ))}
         </View>
       </View>
@@ -283,7 +290,6 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
   const isUser   = msg.role === 'user';
   const slideAnim = useRef(new Animated.Value(isNew ? 16 : 0)).current;
   const fadeAnim  = useRef(new Animated.Value(isNew ? 0  : 1)).current;
-
   useEffect(() => {
     if (!isNew) return;
     Animated.parallel([
@@ -291,7 +297,6 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
       Animated.timing(fadeAnim,  { toValue: 1, duration: 280, useNativeDriver: true }),
     ]).start();
   }, []);
-
   const timeStr = msg.timestamp.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
 
   if (isUser) {
@@ -310,10 +315,7 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
       <View style={b.avatar}>
         <Image source={require('@/assets/features/zuri-ai-256.png')} style={{ width: 28, height: 28, borderRadius: 14 }} />
       </View>
-      <View style={b.aiBubble}>
-        <Text style={b.aiText}>{msg.content}</Text>
-        <Text style={b.aiTime}>{timeStr}</Text>
-      </View>
+      <RichAIBubble content={msg.content} timeStr={timeStr} />
     </Animated.View>
   );
 }
@@ -339,7 +341,6 @@ export default function ChatScreen() {
   const { children, selectedChildId, growthRecords, fetchGrowthRecords } = useChildStore();
   const { vaccineRows, fetchSchedules, fetchImmunizations, computeRows, schedules } = useVaccineStore();
   const { language } = useSettingsStore();
-
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
 
   const getAgeMonths = (): number => {
@@ -395,194 +396,122 @@ export default function ChatScreen() {
     })();
     (async () => {
       try {
-        const { data } = await supabase
-          .from('child_milestones')
-          .select('milestone_id, status')
-          .eq('child_id', activeChild.id);
+        const { data } = await supabase.from('child_milestones').select('milestone_id, status').eq('child_id', activeChild.id);
         const records = data ?? [];
         const achieved   = records.filter((r: any) => r.status === 'achieved');
         const inProgress = records.filter((r: any) => r.status === 'in_progress');
         setMilestoneData({
-          total: 54,
-          achieved: achieved.length,
-          inProgress: inProgress.length,
+          total: 54, achieved: achieved.length, inProgress: inProgress.length,
           achievedTitles:   achieved.slice(0, 10).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
           inProgressTitles: inProgress.slice(0, 5).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
         });
-      } catch (e) {
-        console.warn('[chat] milestone fetch failed', e);
-      }
+      } catch (e) { console.warn('[chat] milestone fetch failed', e); }
     })();
   }, [activeChild?.id]);
 
-  // ── Build context ──────────────────────────────────────────────────────────
   const buildChildContext = (): ChildContext => {
     const ageMonths = getAgeMonths();
-
-    // latest is first (store ordered desc); typed strictly
     const latest: GrowthRecord | null = growthRecords[0] ?? null;
-
-    const countByStatus = (status: string) =>
-      vaccineRows.filter(r => r.status === status).length;
+    const countByStatus = (status: string) => vaccineRows.filter(r => r.status === status).length;
     const namesByStatus = (status: string): string[] =>
-      vaccineRows
-        .filter(r => r.status === status)
+      vaccineRows.filter(r => r.status === status)
         .map(r => `${r.schedule.vaccine_name}${r.schedule.dose_number > 0 ? ' dose ' + r.schedule.dose_number : ''}`)
         .slice(0, 8);
-
-    // Weight trend — last 3 records oldest→newest
     const recentRecords = [...growthRecords].slice(0, 3).reverse() as GrowthRecord[];
-    const weightTrendKg    = recentRecords.map(r => r.weight_kg);
-    const weightTrendDates = recentRecords.map(r => r.date);
-
-    // Feeding stage — getFeedingStage may return undefined; access fields safely
     const feedingStage = getFeedingStage(ageMonths) as
       | { stage?: string; breastfeeding?: string; mealsPerDay?: string; foodGroups?: string }
-      | null
-      | undefined;
-
+      | null | undefined;
     const feedingParts: string[] = [];
     if (feedingStage?.mealsPerDay) feedingParts.push(`Meals/day: ${feedingStage.mealsPerDay}`);
     if (feedingStage?.foodGroups)  feedingParts.push(`Food groups: ${feedingStage.foodGroups}`);
-
     return {
-      name:           activeChild?.full_name     ?? 'your child',
-      ageMonths,
-      sex:            activeChild?.sex           ?? 'unknown',
-      dobStr:         activeChild?.date_of_birth ?? 'unknown',
-      birthWeightKg:  activeChild?.birth_weight_kg,
-      birthHeightCm:  activeChild?.birth_height_cm,
+      name: activeChild?.full_name ?? 'your child', ageMonths,
+      sex: activeChild?.sex ?? 'unknown', dobStr: activeChild?.date_of_birth ?? 'unknown',
+      birthWeightKg: activeChild?.birth_weight_kg, birthHeightCm: activeChild?.birth_height_cm,
       healthFacility: activeChild?.health_facility,
-
-      latestWeight:       latest?.weight_kg       ?? null,
-      latestHeight:       latest?.height_cm       ?? null,
-      latestAgeAtMeasure: latest?.age_months      ?? null,
-      latestMeasureDate:  latest?.date            ?? null,
-      waz:                latest?.waz             ?? null,
-      haz:                latest?.haz             ?? null,
-      whz:                latest?.whz             ?? null,
-      weightStatus:       latest?.waz != null ? getZScoreDisplay(latest.waz).label : null,
-      heightStatus:       latest?.haz != null ? getZScoreDisplay(latest.haz).label : null,
-      whStatus:           latest?.whz != null ? getZScoreDisplay(latest.whz).label : null,
+      latestWeight: latest?.weight_kg ?? null, latestHeight: latest?.height_cm ?? null,
+      latestAgeAtMeasure: latest?.age_months ?? null, latestMeasureDate: latest?.date ?? null,
+      waz: latest?.waz ?? null, haz: latest?.haz ?? null, whz: latest?.whz ?? null,
+      weightStatus: latest?.waz != null ? getZScoreDisplay(latest.waz).label : null,
+      heightStatus: latest?.haz != null ? getZScoreDisplay(latest.haz).label : null,
+      whStatus:     latest?.whz != null ? getZScoreDisplay(latest.whz).label : null,
       totalGrowthRecords: growthRecords.length,
-      weightTrendKg,
-      weightTrendDates,
-
-      vaccineGiven:       countByStatus('given'),
-      vaccineDue:         countByStatus('due'),
-      vaccineMissed:      countByStatus('missed'),
-      vaccineUpcoming:    countByStatus('upcoming'),
-      vaccineTotal:       vaccineRows.length,
-      dueVaccineNames:    namesByStatus('due'),
-      missedVaccineNames: namesByStatus('missed'),
-
+      weightTrendKg:    recentRecords.map(r => r.weight_kg),
+      weightTrendDates: recentRecords.map(r => r.date),
+      vaccineGiven: countByStatus('given'), vaccineDue: countByStatus('due'),
+      vaccineMissed: countByStatus('missed'), vaccineUpcoming: countByStatus('upcoming'),
+      vaccineTotal: vaccineRows.length,
+      dueVaccineNames: namesByStatus('due'), missedVaccineNames: namesByStatus('missed'),
       feedingStageLabel:       feedingStage?.stage        ?? `${ageMonths} months`,
       feedingStageDescription: feedingStage?.breastfeeding ?? feedingStage?.mealsPerDay ?? '',
-      feedingExtra:            feedingParts.join('\n'),
-
-      milestonesTotal:           milestoneData.total,
-      milestonesAchieved:        milestoneData.achieved,
-      milestonesInProgress:      milestoneData.inProgress,
-      achievedMilestoneTitles:   milestoneData.achievedTitles,
+      feedingExtra: feedingParts.join('\n'),
+      milestonesTotal: milestoneData.total, milestonesAchieved: milestoneData.achieved,
+      milestonesInProgress: milestoneData.inProgress,
+      achievedMilestoneTitles: milestoneData.achievedTitles,
       inProgressMilestoneTitles: milestoneData.inProgressTitles,
-
       language,
     };
   };
 
-  // ── Personalised suggestions ───────────────────────────────────────────────
   const getSuggestions = (): string[] => {
     const ageMonths = getAgeMonths();
     const base: string[] = [];
-
     if (vaccineRows.some(r => r.status === 'missed')) base.push('My baby missed a vaccine — what do I do?');
     if (vaccineRows.some(r => r.status === 'due'))    base.push('Which vaccines are due now?');
-
     const latestWaz = growthRecords[0]?.waz ?? null;
-    if (latestWaz != null && latestWaz < -2) base.push('My baby\'s weight is low — what should I do?');
-    else if (growthRecords.length > 0)       base.push('Is my baby growing well?');
-    else                                     base.push('How do I track my baby\'s growth?');
-
+    if (latestWaz != null && latestWaz < -2) base.push("My baby's weight is low — what should I do?");
+    else if (growthRecords.length > 0) base.push('Is my baby growing well?');
+    else base.push("How do I track my baby's growth?");
     if (ageMonths >= 6 && ageMonths <= 9) base.push('How do I start solid foods?');
-    if (ageMonths < 6)                    base.push('How often should I breastfeed?');
-
+    if (ageMonths < 6) base.push('How often should I breastfeed?');
     base.push('What should I feed my baby?', 'My baby has a fever', 'Signs of dehydration', 'Breastfeeding tips');
-
     return base.slice(0, 7);
   };
 
-  // ── Messages state ─────────────────────────────────────────────────────────
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '0',
-      role: 'assistant',
-      content: activeChild
-        ? `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more — all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
-        : `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([{
+    id: '0', role: 'assistant',
+    content: activeChild
+      ? `Habari! I'm Zuri, your ZuriHealth assistant \uD83D\uDC99\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more — all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
+      : `Habari! I'm Zuri, your ZuriHealth assistant \uD83D\uDC99\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
+    timestamp: new Date(),
+  }]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
   const [newMsgIds, setNewMsgIds] = useState<Set<string>>(new Set(['0']));
   const scrollRef = useRef<ScrollView>(null);
-
-  const scrollToBottom = () =>
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  const scrollToBottom = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
   const sendMessage = async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
-
     const id = Date.now().toString();
     const userMsg: Message = { id, role: 'user', content: msg, timestamp: new Date() };
     const updated = [...messages, userMsg];
-
     setMessages(updated);
     setNewMsgIds(prev => new Set([...prev, id]));
-    setInput('');
-    setLoading(true);
-    scrollToBottom();
-
+    setInput(''); setLoading(true); scrollToBottom();
     try {
-      const apiMessages = updated
-        .filter(m => m.id !== '0')
-        .map(m => ({ role: m.role, content: m.content }));
-
+      const apiMessages = updated.filter(m => m.id !== '0').map(m => ({ role: m.role, content: m.content }));
       const ctx = buildChildContext();
-
       const res = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_API_KEY },
         body: JSON.stringify({
-          model: GROQ_MODEL,
-          max_tokens: 1024,
-          messages: [
-            { role: 'system', content: buildSystemPrompt(ctx) },
-            ...apiMessages,
-          ],
+          model: GROQ_MODEL, max_tokens: 512,
+          messages: [{ role: 'system', content: buildSystemPrompt(ctx) }, ...apiMessages],
         }),
       });
-
       const data  = await res.json();
-      const reply: string = data?.choices?.[0]?.message?.content
-        ?? 'Sorry, I could not get a response. Please try again.';
-
+      const reply: string = data?.choices?.[0]?.message?.content ?? 'Sorry, I could not get a response. Please try again.';
       const replyId = (Date.now() + 1).toString();
       setMessages(prev => [...prev, { id: replyId, role: 'assistant', content: reply, timestamp: new Date() }]);
       setNewMsgIds(prev => new Set([...prev, replyId]));
       scrollToBottom();
     } catch {
       const errId = (Date.now() + 1).toString();
-      setMessages(prev => [...prev, {
-        id: errId, role: 'assistant',
-        content: 'I\'m having trouble connecting. Please check your internet and try again.',
-        timestamp: new Date(),
-      }]);
+      setMessages(prev => [...prev, { id: errId, role: 'assistant', content: "I'm having trouble connecting. Please check your internet and try again.", timestamp: new Date() }]);
       setNewMsgIds(prev => new Set([...prev, errId]));
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const ageMonths   = getAgeMonths();
@@ -592,17 +521,11 @@ export default function ChatScreen() {
   const hasDue      = vaccineRows.some(r => r.status === 'due');
   const suggestions = getSuggestions();
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* ── Header ── */}
+    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={s.header}>
         <View style={s.headerOrb1} />
         <View style={s.headerOrb2} />
-
         <View style={s.headerRow}>
           <View style={s.avatarWrap}>
             <View style={s.avatarOuter}>
@@ -612,12 +535,10 @@ export default function ChatScreen() {
             </View>
             <View style={s.onlineDot} />
           </View>
-
           <View style={{ flex: 1 }}>
             <Text style={s.headerTitle}>Zuri</Text>
             <Text style={s.headerSub}>Evidence-based · ZuriHealth</Text>
           </View>
-
           {(hasDue || hasMissed) && (
             <View style={s.alertBadge}>
               <Ionicons name="medical" size={12} color="#fff" />
@@ -625,15 +546,10 @@ export default function ChatScreen() {
             </View>
           )}
         </View>
-
         {activeChild && (
           <View style={s.contextStrip}>
             <View style={s.childPill}>
-              <Ionicons
-                name={activeChild.sex === 'female' ? 'female' : 'male'}
-                size={11}
-                color={COLORS.primary}
-              />
+              <Ionicons name={activeChild.sex === 'female' ? 'female' : 'male'} size={11} color={COLORS.primary} />
               <Text style={s.childPillText}>{activeChild.full_name} · {ageMonths}mo</Text>
             </View>
             <View style={s.dataPills}>
@@ -644,22 +560,12 @@ export default function ChatScreen() {
         )}
       </View>
 
-      {/* ── Messages ── */}
-      <ScrollView
-        ref={scrollRef}
-        style={s.messageList}
-        contentContainerStyle={s.messageContent}
-        showsVerticalScrollIndicator={false}
-        onContentSizeChange={scrollToBottom}
-      >
-        {messages.map(msg => (
-          <MessageBubble key={msg.id} msg={msg} isNew={newMsgIds.has(msg.id)} />
-        ))}
+      <ScrollView ref={scrollRef} style={s.messageList} contentContainerStyle={s.messageContent} showsVerticalScrollIndicator={false} onContentSizeChange={scrollToBottom}>
+        {messages.map(msg => <MessageBubble key={msg.id} msg={msg} isNew={newMsgIds.has(msg.id)} />)}
         {loading && <TypingDots />}
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      {/* ── Suggestion chips ── */}
       <View style={s.suggestBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.suggestRow}>
           {suggestions.map(text => (
@@ -670,26 +576,17 @@ export default function ChatScreen() {
         </ScrollView>
       </View>
 
-      {/* ── Input ── */}
       <View style={s.inputBar}>
         <TextInput
-          style={s.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Ask Zuri a health question…"
-          placeholderTextColor={COLORS.textMuted}
-          multiline
-          maxLength={500}
+          style={s.input} value={input} onChangeText={setInput}
+          placeholder="Ask Zuri a health question..." placeholderTextColor={COLORS.textMuted}
+          multiline maxLength={500}
         />
         <TouchableOpacity
           style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnOff]}
-          onPress={() => sendMessage()}
-          disabled={!input.trim() || loading}
-          activeOpacity={0.85}
+          onPress={() => sendMessage()} disabled={!input.trim() || loading} activeOpacity={0.85}
         >
-          {loading
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Ionicons name="send" size={17} color="#fff" />}
+          {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={17} color="#fff" />}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -702,148 +599,101 @@ export default function ChatScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background, paddingBottom: 104 },
-
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingTop: Platform.OS === 'ios' ? 56 : 44,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    overflow: 'hidden',
-  },
-  headerOrb1: {
-    position: 'absolute', width: 180, height: 180, borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40,
-  },
-  headerOrb2: {
-    position: 'absolute', width: 100, height: 100, borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 40,
-  },
+  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 44, paddingBottom: 12, paddingHorizontal: 16, overflow: 'hidden' },
+  headerOrb1: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40 },
+  headerOrb2: { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 40 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-
   avatarWrap:  { position: 'relative' },
-  avatarOuter: {
-    width: 44, height: 44, borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarInner: {
-    width: 32, height: 32, borderRadius: 11,
-    backgroundColor: COLORS.white,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  onlineDot: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: COLORS.given,
-    borderWidth: 2, borderColor: COLORS.primary,
-  },
+  avatarOuter: { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  avatarInner: { width: 32, height: 32, borderRadius: 11, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.given, borderWidth: 2, borderColor: COLORS.primary },
   headerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.white, letterSpacing: -0.5 },
   headerSub:   { fontSize: 11, color: COLORS.primaryMid, marginTop: 1, fontWeight: '500' },
-
-  alertBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: COLORS.missed,
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: RADIUS.full,
-  },
+  alertBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.missed, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
   alertBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
-
-  contextStrip: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', gap: 8,
-  },
-  childPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: RADIUS.full,
-  },
+  contextStrip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  childPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
   childPillText: { fontSize: 11, color: COLORS.white, fontWeight: '600' },
-  dataPills:     { flexDirection: 'row', gap: 6 },
-
-  messageList:    { flex: 1 },
+  dataPills: { flexDirection: 'row', gap: 6 },
+  messageList: { flex: 1 },
   messageContent: { paddingHorizontal: 16, paddingTop: 20 },
-
-  suggestBar: {
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1, borderTopColor: COLORS.border,
-    paddingVertical: 10,
-  },
+  suggestBar: { backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border, paddingVertical: 10 },
   suggestRow: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border },
+  input: { flex: 1, backgroundColor: COLORS.background, borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: COLORS.textPrimary, borderWidth: 1.5, borderColor: COLORS.border, maxHeight: 100, marginBottom: 24 },
+  sendBtn: { width: 46, height: 46, borderRadius: 15, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 24, elevation: 6 },
+  sendBtnOff: { backgroundColor: COLORS.primaryMid },
+});
 
-  inputBar: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 12,
+// Rich bubble styles
+const rb = StyleSheet.create({
+  card: {
     backgroundColor: COLORS.white,
-    borderTopWidth: 1, borderTopColor: COLORS.border,
+    borderRadius: 18,
+    borderBottomLeftRadius: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    maxWidth: W * 0.78,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 2,
+    gap: 10,
   },
-  input: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, color: COLORS.textPrimary,
-    borderWidth: 1.5, borderColor: COLORS.border,
-    maxHeight: 100, marginBottom: 24,
+  emergencyBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#DC2626',
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
   },
-  sendBtn: {
-    width: 46, height: 46, borderRadius: 15,
+  emergencyText: { fontSize: 12, fontWeight: '700', color: '#fff', flex: 1 },
+  answerText: { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary, fontWeight: '500' },
+  bulletsSection: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 10,
+    padding: 10,
+    gap: 7,
+  },
+  bulletsSectionLabel: {
+    fontSize: 10, fontWeight: '800', color: COLORS.primary,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2,
+  },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  bulletDot: {
+    width: 20, height: 20, borderRadius: 10,
     backgroundColor: COLORS.primary,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 24,
-    ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }), elevation: 6,
+    flexShrink: 0, marginTop: 1,
   },
-  sendBtnOff: { backgroundColor: COLORS.primaryMid, shadowOpacity: 0 },
+  bulletDotText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+  bulletText: { fontSize: 13, lineHeight: 20, color: COLORS.textPrimary, flex: 1 },
+  sourceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#BAE6FD',
+  },
+  sourceText: { fontSize: 11, color: COLORS.primary, fontWeight: '600', flex: 1 },
+  timeText: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 2 },
 });
 
 const b = StyleSheet.create({
   userRow: { alignItems: 'flex-end', marginBottom: 14 },
-  userBubble: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 18, borderBottomRightRadius: 5,
-    paddingHorizontal: 14, paddingVertical: 10,
-    maxWidth: W * 0.78,
-    ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 4,
-  },
+  userBubble: { backgroundColor: COLORS.primary, borderRadius: 18, borderBottomRightRadius: 5, paddingHorizontal: 14, paddingVertical: 10, maxWidth: W * 0.78, elevation: 4 },
   userText: { fontSize: 14, lineHeight: 21, color: COLORS.white },
   userTime: { fontSize: 10, color: COLORS.primaryMid, marginTop: 4, textAlign: 'right' },
-
   aiRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 14 },
-  avatar: {
-    width: 30, height: 30, borderRadius: 10,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center', justifyContent: 'center',
-    ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }), elevation: 3,
-  },
-  aiBubble: {
-    backgroundColor: COLORS.white,
-    borderRadius: 18, borderBottomLeftRadius: 5,
-    paddingHorizontal: 14, paddingVertical: 10,
-    maxWidth: W * 0.75,
-    borderWidth: 1, borderColor: COLORS.border,
-    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }), elevation: 2,
-  },
+  avatar: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden', elevation: 3 },
+  aiBubble: { backgroundColor: COLORS.white, borderRadius: 18, borderBottomLeftRadius: 5, paddingHorizontal: 14, paddingVertical: 10, maxWidth: W * 0.75, borderWidth: 1, borderColor: COLORS.border, elevation: 2 },
   aiText: { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary },
   aiTime: { fontSize: 10, color: COLORS.textMuted, marginTop: 4 },
 });
 
 const ch = StyleSheet.create({
-  chip: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.primaryLight,
-    borderWidth: 1, borderColor: COLORS.border,
-  },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.primaryLight, borderWidth: 1, borderColor: COLORS.border },
   text: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
 });
 
 const pill = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: RADIUS.full, borderWidth: 1,
-  },
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, borderWidth: 1 },
   ok:   { backgroundColor: COLORS.givenLight, borderColor: COLORS.given },
   warn: { backgroundColor: COLORS.dueLight,   borderColor: COLORS.due  },
   text: { fontSize: 10, fontWeight: '600' },
