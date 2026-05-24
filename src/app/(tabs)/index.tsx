@@ -373,8 +373,8 @@ export default function HomeScreen() {
         <View style={styles.zuriLeft}>
           <View style={styles.zuriAvatar}>
             <Image
-              source={require('@/assets/features/feature-zuri-ai.png')}
-              style={{ width: 26, height: 26, resizeMode: 'contain', tintColor: '#fff' }}
+              source={require('@/assets/features/zuri-ai-512.png')}
+              style={{ width: 44, height: 44, resizeMode: 'cover' }}
             />
           </View>
           <View>
@@ -630,9 +630,8 @@ const styles = StyleSheet.create({
   zuriAvatar: {
     width: 44, height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: COLORS.primaryLight,
   },
   zuriTitle: { fontSize: 14, fontWeight: '800', color: '#1A202C' },
   zuriSub:   { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },

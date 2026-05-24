@@ -14,7 +14,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '@/lib/theme';
 import { setupNotifications, registerTapHandler } from '@/lib/notificationService';
 
@@ -22,7 +22,7 @@ SplashScreen.preventAutoHideAsync();
 
 // Screens where the FAB should NOT appear
 const FAB_HIDDEN_SEGMENTS = ['(auth)', '(admin)'];
-const FAB_HIDDEN_SCREENS  = ['chat', 'vaccines', 'milestones', 'growth'];
+const FAB_HIDDEN_SCREENS  = ['chat', 'vaccines', 'milestones', 'growth', 'index'];
 
 function ZuriFAB() {
   const router   = useRouter();
@@ -33,6 +33,7 @@ function ZuriFAB() {
 
   if (FAB_HIDDEN_SEGMENTS.includes(currentGroup))  return null;
   if (FAB_HIDDEN_SCREENS.includes(currentScreen))  return null;
+  if (currentGroup === '(tabs)' && currentScreen === '') return null;
 
   return (
     <TouchableOpacity
@@ -40,7 +41,7 @@ function ZuriFAB() {
       onPress={() => router.push('/(tabs)/chat' as any)}
       activeOpacity={0.85}
     >
-      <Ionicons name="chatbubble-ellipses" size={26} color="#fff" />
+      <Image source={require('@/assets/features/zuri-ai-256.png')} style={{ width: 44, height: 44, borderRadius: 22 }} />
     </TouchableOpacity>
   );
 }
@@ -134,9 +135,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: COLORS.primary,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
     elevation: 6,
 
     ...Platform.select({

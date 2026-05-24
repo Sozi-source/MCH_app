@@ -26,7 +26,7 @@ import { supabase } from '@/lib/supabase';
 import type { GrowthRecord } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import {
+import { Image,
   ActivityIndicator,
   Animated,
   Dimensions,
@@ -259,7 +259,7 @@ function TypingDots() {
   return (
     <View style={b.aiRow}>
       <View style={b.avatar}>
-        <Ionicons name="heart" size={13} color="#fff" />
+        <Image source={require('@/assets/features/zuri-ai-256.png')} style={{ width: 28, height: 28, borderRadius: 14 }} />
       </View>
       <View style={b.aiBubble}>
         <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center', paddingVertical: 2 }}>
@@ -308,7 +308,7 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
   return (
     <Animated.View style={[b.aiRow, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <View style={b.avatar}>
-        <Ionicons name="heart" size={13} color="#fff" />
+        <Image source={require('@/assets/features/zuri-ai-256.png')} style={{ width: 28, height: 28, borderRadius: 14 }} />
       </View>
       <View style={b.aiBubble}>
         <Text style={b.aiText}>{msg.content}</Text>
@@ -607,7 +607,7 @@ export default function ChatScreen() {
           <View style={s.avatarWrap}>
             <View style={s.avatarOuter}>
               <View style={s.avatarInner}>
-                <Ionicons name="heart" size={16} color={COLORS.primary} />
+                <Image source={require('@/assets/features/zuri-ai-256.png')} style={{ width: 28, height: 28, borderRadius: 14 }} />
               </View>
             </View>
             <View style={s.onlineDot} />
