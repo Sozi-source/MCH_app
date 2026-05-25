@@ -182,7 +182,8 @@ interface VaccineState {
 
   markAsGiven:        (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date, childDob?: string) => Promise<void>;
   markAsMissed:       (scheduleId: string, childId: string, childDob?: string) => Promise<void>;
-  updateImmunization: (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
+    updateImmunization: (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
+  unmarkImmunization: (immunizationId: string, childId: string, childDob: string) => Promise<void>;
 }
 
 export const useVaccineStore = create<VaccineState>((set, get) => ({
@@ -326,5 +327,16 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     }
     const fresh2 = await get().fetchImmunizations(childId);
     if (childDob) get().computeRows(childDob, fresh2);
+  },
+
+  unmarkImmunization: async (immunizationId, childId, childDob) => {
+    const { error } = await supabase
+      .from('immunizations')
+      .delete()
+      .eq('id', immunizationId)
+      .eq('child_id', childId);
+    assertNoError(error, 'unmarkImmunization');
+    const fresh = await get().fetchImmunizations(childId);
+    get().computeRows(childDob, fresh);
   },
 }));

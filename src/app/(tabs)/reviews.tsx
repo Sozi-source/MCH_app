@@ -37,10 +37,17 @@ export default function ReviewsScreen() {
   const router = useRouter();
   const { session } = useAuthStore();
   const {
-    reviews, myReview, loading,
-    averageRating, ratingBreakdown,
-    fetchReviews, fetchMyReview, fetchMyHelpfulVotes,
-    toggleHelpful, myHelpfulVotes, deleteMyReview,
+    reviews,
+    myReview,
+    loading,
+    averageRating,
+    ratingBreakdown,
+    fetchReviews,
+    fetchMyReview,
+    fetchMyHelpfulVotes,
+    toggleHelpful,
+    myHelpfulVotes,
+    deleteMyReview,
   } = useReviewStore();
 
   useEffect(() => {
@@ -52,13 +59,24 @@ export default function ReviewsScreen() {
   }, []);
 
   const handleDelete = () => {
-    Alert.alert('Delete Review', 'Are you sure you want to delete your review?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: () => session?.user?.id && deleteMyReview(session.user.id),
-      },
-    ]);
+    if (!session?.user?.id) return;
+    Alert.alert(
+      'Delete Review',
+      'Are you sure you want to delete your review?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteMyReview(session.user.id);
+            if (error) {
+              Alert.alert('Could not delete review', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const total = Object.values(ratingBreakdown).reduce((a, b) => a + b, 0);
@@ -82,13 +100,18 @@ export default function ReviewsScreen() {
       {loading ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
-        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-          {/* Rating summary */}
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Rating summary card ── */}
           <View style={s.summaryCard}>
             <View style={s.summaryLeft}>
               <Text style={s.bigRating}>{averageRating.toFixed(1)}</Text>
               <Stars rating={Math.round(averageRating)} size={20} />
-              <Text style={s.totalText}>{total} review{total !== 1 ? 's' : ''}</Text>
+              <Text style={s.totalText}>
+                {total} review{total !== 1 ? 's' : ''}
+              </Text>
             </View>
             <View style={s.summaryRight}>
               {([5, 4, 3, 2, 1] as const).map(star => {
@@ -107,13 +130,16 @@ export default function ReviewsScreen() {
             </View>
           </View>
 
-          {/* My review */}
+          {/* ── My review or write prompt ── */}
           {myReview ? (
             <View style={s.myReviewCard}>
               <View style={s.myReviewHeader}>
                 <Text style={s.myReviewLabel}>Your Review</Text>
                 <View style={s.myReviewActions}>
-                  <TouchableOpacity onPress={() => router.push('/write-review' as any)} style={s.editBtn}>
+                  <TouchableOpacity
+                    onPress={() => router.push('/write-review' as any)}
+                    style={s.editBtn}
+                  >
                     <Ionicons name="pencil-outline" size={16} color={COLORS.primary} />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleDelete} style={s.editBtn}>
@@ -122,8 +148,12 @@ export default function ReviewsScreen() {
                 </View>
               </View>
               <Stars rating={myReview.rating} />
-              {myReview.title ? <Text style={s.reviewTitle}>{myReview.title}</Text> : null}
-              {myReview.body ? <Text style={s.reviewBody}>{myReview.body}</Text> : null}
+              {myReview.title ? (
+                <Text style={s.reviewTitle}>{myReview.title}</Text>
+              ) : null}
+              {myReview.body ? (
+                <Text style={s.reviewBody}>{myReview.body}</Text>
+              ) : null}
             </View>
           ) : (
             <TouchableOpacity
@@ -131,43 +161,69 @@ export default function ReviewsScreen() {
               onPress={() => router.push('/write-review' as any)}
             >
               <Ionicons name="star-outline" size={20} color={COLORS.primary} />
-              <Text style={s.writePromptText}>Share your experience with mamaTOTO</Text>
+              <Text style={s.writePromptText}>
+                Share your experience with mamaTOTO
+              </Text>
               <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
             </TouchableOpacity>
           )}
 
-          {/* All reviews */}
-          {reviews.filter(r => r.id !== myReview?.id).map(r => (
-            <View key={r.id} style={s.reviewCard}>
-              <View style={s.reviewTop}>
-                <View style={s.avatar}>
-                  <Text style={s.avatarText}>{(r.display_name?.[0] ?? '?').toUpperCase()}</Text>
+          {/* ── Other users' reviews ── */}
+          {reviews
+            .filter(r => r.id !== myReview?.id)
+            .map(r => (
+              <View key={r.id} style={s.reviewCard}>
+                <View style={s.reviewTop}>
+                  <View style={s.avatar}>
+                    <Text style={s.avatarText}>
+                      {(r.display_name?.[0] ?? '?').toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.reviewerName}>
+                      {r.display_name ?? 'Anonymous'}
+                    </Text>
+                    <Stars rating={r.rating} size={13} />
+                  </View>
+                  <Text style={s.reviewDate}>
+                    {new Date(r.created_at).toLocaleDateString('en-KE', {
+                      day: 'numeric',
+                      month: 'short',
+                    })}
+                  </Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.reviewerName}>{r.display_name ?? 'Anonymous'}</Text>
-                  <Stars rating={r.rating} size={13} />
-                </View>
-                <Text style={s.reviewDate}>
-                  {new Date(r.created_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
-                </Text>
+                {r.title ? (
+                  <Text style={s.reviewTitle}>{r.title}</Text>
+                ) : null}
+                {r.body ? (
+                  <Text style={s.reviewBody}>{r.body}</Text>
+                ) : null}
+                <TouchableOpacity
+                  style={s.helpfulBtn}
+                  onPress={() =>
+                    session?.user?.id && toggleHelpful(r.id, session.user.id)
+                  }
+                >
+                  <Ionicons
+                    name={
+                      myHelpfulVotes.has(r.id) ? 'thumbs-up' : 'thumbs-up-outline'
+                    }
+                    size={14}
+                    color={
+                      myHelpfulVotes.has(r.id) ? COLORS.primary : COLORS.textMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      s.helpfulText,
+                      myHelpfulVotes.has(r.id) && { color: COLORS.primary },
+                    ]}
+                  >
+                    Helpful {r.helpful_count > 0 ? `(${r.helpful_count})` : ''}
+                  </Text>
+                </TouchableOpacity>
               </View>
-              {r.title ? <Text style={s.reviewTitle}>{r.title}</Text> : null}
-              {r.body ? <Text style={s.reviewBody}>{r.body}</Text> : null}
-              <TouchableOpacity
-                style={s.helpfulBtn}
-                onPress={() => session?.user?.id && toggleHelpful(r.id, session.user.id)}
-              >
-                <Ionicons
-                  name={myHelpfulVotes.has(r.id) ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={14}
-                  color={myHelpfulVotes.has(r.id) ? COLORS.primary : COLORS.textMuted}
-                />
-                <Text style={[s.helpfulText, myHelpfulVotes.has(r.id) && { color: COLORS.primary }]}>
-                  Helpful {r.helpful_count > 0 ? `(${r.helpful_count})` : ''}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+            ))}
 
           <View style={{ height: 100 }} />
         </ScrollView>

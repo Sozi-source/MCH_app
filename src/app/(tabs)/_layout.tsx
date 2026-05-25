@@ -1,4 +1,4 @@
-﻿import { COLORS } from '@/lib/theme';
+import { COLORS } from '@/lib/theme';
 import { Tabs } from 'expo-router';
 import { Image, Platform } from 'react-native';
 

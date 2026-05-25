@@ -1,4 +1,4 @@
-{
+﻿{
   "expo": {
     "name": "ZuriHealth",
     "slug": "mamaTOTO",
@@ -31,7 +31,7 @@
         {
           "backgroundColor": "#208AEF",
           "image": "./assets/images/icon.png",
-          "imageWidth": 100
+          "imageWidth": 250
         }
       ],
       "expo-secure-store",
@@ -58,3 +58,4 @@
     }
   }
 }
+

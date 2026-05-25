@@ -34,6 +34,7 @@ export default function WriteReviewScreen() {
     if (session?.user?.id) fetchMyReview(session.user.id);
   }, []);
 
+  // Sync fields when myReview loads (e.g. editing an existing review)
   useEffect(() => {
     if (myReview) {
       setRating(myReview.rating);
@@ -43,16 +44,37 @@ export default function WriteReviewScreen() {
   }, [myReview]);
 
   const handleSubmit = async () => {
-    if (!session?.user?.id) return;
-    if (rating === 0) { Alert.alert('Rating required', 'Please select a star rating.'); return; }
-    await submitReview(session.user.id, rating, title.trim(), body.trim());
+    if (!session?.user?.id) {
+      Alert.alert('Not signed in', 'Please sign in to leave a review.');
+      return;
+    }
+    if (rating === 0) {
+      Alert.alert('Rating required', 'Please select a star rating.');
+      return;
+    }
+
+    const { error } = await submitReview(
+      session.user.id,
+      rating,
+      title.trim(),
+      body.trim()
+    );
+
+    if (error) {
+      Alert.alert('Could not save review', error);
+      return;
+    }
+
     router.back();
   };
 
   const isEdit = !!myReview;
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={s.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
@@ -62,7 +84,10 @@ export default function WriteReviewScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={s.prompt}>How would you rate your experience with mamaTOTO?</Text>
 
         {/* Star picker */}
@@ -84,7 +109,9 @@ export default function WriteReviewScreen() {
         )}
 
         {/* Title */}
-        <Text style={s.label}>Title <Text style={s.optional}>(optional)</Text></Text>
+        <Text style={s.label}>
+          Title <Text style={s.optional}>(optional)</Text>
+        </Text>
         <TextInput
           style={s.input}
           placeholder="Summarise your experience..."
@@ -96,7 +123,9 @@ export default function WriteReviewScreen() {
         <Text style={s.charCount}>{title.length}/80</Text>
 
         {/* Body */}
-        <Text style={s.label}>Review <Text style={s.optional}>(optional)</Text></Text>
+        <Text style={s.label}>
+          Review <Text style={s.optional}>(optional)</Text>
+        </Text>
         <TextInput
           style={[s.input, s.textarea]}
           placeholder="Tell other parents what you think..."
@@ -115,10 +144,13 @@ export default function WriteReviewScreen() {
           onPress={handleSubmit}
           disabled={rating === 0 || submitting}
         >
-          {submitting
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={s.submitText}>{isEdit ? 'Update Review' : 'Submit Review'}</Text>
-          }
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={s.submitText}>
+              {isEdit ? 'Update Review' : 'Submit Review'}
+            </Text>
+          )}
         </TouchableOpacity>
 
         <View style={{ height: 60 }} />

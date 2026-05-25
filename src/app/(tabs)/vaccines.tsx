@@ -1,9 +1,15 @@
-﻿import { COLORS, RADIUS } from '@/lib/theme';
+﻿// src/app/(tabs)/vaccines.tsx
+// mamaTOTO — Immunization Screen
+
+import { COLORS, RADIUS } from '@/lib/theme';
 import { useChildStore } from '@/store/childStore';
 import { useVaccineStore, VaccineRow, VaccineStatus } from '@/store/vaccineStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-function toTitleCase(str: string): string { return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()); }
+
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -75,14 +81,17 @@ const STATUS_CONFIG: Record<VaccineStatus, StatusCfg> = {
 };
 
 const FILTER_OPTIONS: { key: VaccineStatus | 'all'; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'due', label: 'Due' },
+  { key: 'all',      label: 'All' },
+  { key: 'due',      label: 'Due' },
   { key: 'upcoming', label: 'Upcoming' },
-  { key: 'given', label: 'Given' },
-  { key: 'missed', label: 'Missed' },
+  { key: 'given',    label: 'Given' },
+  { key: 'missed',   label: 'Missed' },
 ];
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
 
 /* ─────────────────────────────────────────────
    Helpers
@@ -102,7 +111,7 @@ function getDueLabel(row: VaccineRow): string | null {
   if (row.status === 'given') return formatDate(row.immunization?.given_date);
   const d = row.daysUntilDue ?? 0;
   if (d === 0) return 'Due today';
-  if (d > 0) return `In ${d} day${d === 1 ? '' : 's'}`;
+  if (d > 0)   return `In ${d} day${d === 1 ? '' : 's'}`;
   return `${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} overdue`;
 }
 
@@ -110,12 +119,18 @@ function getDueLabel(row: VaccineRow): string | null {
    Inline date picker
 ───────────────────────────────────────────── */
 
-function InlineDatePicker({ value, onChange }: { value: Date; onChange: (d: Date) => void }) {
+function InlineDatePicker({
+  value,
+  onChange,
+}: {
+  value: Date;
+  onChange: (d: Date) => void;
+}) {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
-  const [selYear, setSelYear] = useState(value.getFullYear());
+  const [selYear,  setSelYear]  = useState(value.getFullYear());
   const [selMonth, setSelMonth] = useState(value.getMonth());
-  const [selDay, setSelDay] = useState(value.getDate());
+  const [selDay,   setSelDay]   = useState(value.getDate());
 
   const daysInMonth = new Date(selYear, selMonth + 1, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -162,11 +177,17 @@ function InlineDatePicker({ value, onChange }: { value: Date; onChange: (d: Date
 }
 
 /* ─────────────────────────────────────────────
-   Mark / Edit modal — premium sheet
+   Mark / Edit modal
+   Fix: KAV wraps the sheet; header pinned outside ScrollView;
+        buttons always reachable at bottom of ScrollView
 ───────────────────────────────────────────── */
 
 function MarkGivenModal({
-  visible, row, onConfirm, onCancel, editMode,
+  visible,
+  row,
+  onConfirm,
+  onCancel,
+  editMode,
 }: {
   visible: boolean;
   row: VaccineRow | null;
@@ -175,14 +196,18 @@ function MarkGivenModal({
   onCancel: () => void;
 }) {
   const [facility, setFacility] = useState('');
-  const [date, setDate] = useState(new Date());
+  const [date,     setDate]     = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
       if (editMode && row?.immunization) {
         setFacility(row.immunization.facility ?? '');
-        setDate(row.immunization.given_date ? new Date(row.immunization.given_date) : new Date());
+        setDate(
+          row.immunization.given_date
+            ? new Date(row.immunization.given_date)
+            : new Date(),
+        );
       } else {
         setFacility('');
         setDate(new Date());
@@ -195,18 +220,18 @@ function MarkGivenModal({
 
   const cfg = STATUS_CONFIG[row.status];
 
-  const content = (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={mds.card}
-        contentContainerStyle={{ paddingBottom: 48 }}
-        showsVerticalScrollIndicator={false}
-      >
+  const sheetContent = (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={mds.kavWrapper}
+      keyboardVerticalOffset={0}
+    >
+      <View style={mds.card}>
+        {/* Drag handle */}
         <View style={mds.handle} />
 
-        {/* Vaccine identity hero */}
+        {/* Vaccine identity hero — pinned OUTSIDE ScrollView so it never scrolls away */}
         <View style={[mds.heroStripe, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-          {/* Decorative circle */}
           <View style={[mds.heroCircle, { borderColor: cfg.border }]} />
           <View style={[mds.iconCircle, { backgroundColor: cfg.accent }]}>
             <Ionicons name={cfg.icon} size={22} color="#fff" />
@@ -218,106 +243,238 @@ function MarkGivenModal({
                 <Text style={mds.heroBadgeText}>{cfg.label}</Text>
               </View>
             </View>
-            <Text style={mds.title}>{editMode ? 'Edit Immunization Record' : row.schedule.vaccine_name}</Text>
+            <Text style={mds.title}>
+              {editMode ? 'Edit Immunization Record' : row.schedule.vaccine_name}
+            </Text>
             <Text style={mds.subtitle}>
               {'Dose ' + row.schedule.dose_number + ' · ' + row.schedule.diseases_covered}
             </Text>
           </View>
         </View>
 
-        {/* Info tip */}
-        <View style={mds.infoTip}>
-          <Ionicons name="information-circle-outline" size={15} color={COLORS.primary} />
-          <Text style={mds.infoTipText}>
-            {editMode
-              ? 'Update the vaccination details below.'
-              : 'Enter the date and facility where this vaccine was administered.'}
-          </Text>
-        </View>
-
-        {/* Date */}
-        <Text style={mds.fieldLabel}>📅 Date Given</Text>
-        <TouchableOpacity
-          style={[mds.dateRow, showPicker && mds.dateRowActive]}
-          onPress={() => setShowPicker(p => !p)}
+        {/* Scrollable body — buttons live INSIDE here so they scroll into view */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={mds.scrollContent}
         >
-          <View style={mds.dateIconWrap}>
-            <Ionicons name="calendar-outline" size={17} color={COLORS.primary} />
+          {/* Info tip */}
+          <View style={mds.infoTip}>
+            <Ionicons name="information-circle-outline" size={15} color={COLORS.primary} />
+            <Text style={mds.infoTipText}>
+              {editMode
+                ? 'Update the vaccination details below.'
+                : 'Enter the date and facility where this vaccine was administered.'}
+            </Text>
           </View>
-          <Text style={mds.dateText}>
-            {date.toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </Text>
-          <Ionicons
-            name={showPicker ? 'chevron-up-outline' : 'chevron-down-outline'}
-            size={16}
-            color={COLORS.textMuted}
-          />
-        </TouchableOpacity>
-        {showPicker && <InlineDatePicker value={date} onChange={setDate} />}
 
-        {/* Facility */}
-        <Text style={mds.fieldLabel}>🏥 Health Facility</Text>
-        <View style={mds.inputWrapper}>
-          <View style={mds.inputIconWrap}>
-            <Ionicons name="business-outline" size={17} color={COLORS.primary} />
-          </View>
-          <TextInput
-            style={mds.input}
-            value={facility}
-            onChangeText={setFacility}
-            placeholder="e.g. Kenyatta National Hospital"
-            placeholderTextColor={COLORS.textMuted}
-          />
-        </View>
-
-        {/* Buttons */}
-        <View style={mds.btnRow}>
-          <TouchableOpacity style={mds.cancelBtn} onPress={onCancel}>
-            <Text style={mds.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+          {/* Date */}
+          <Text style={mds.fieldLabel}>📅 Date Given</Text>
           <TouchableOpacity
-            style={[mds.confirmBtn, { backgroundColor: cfg.accent }]}
-            onPress={() => onConfirm(facility, date)}
+            style={[mds.dateRow, showPicker && mds.dateRowActive]}
+            onPress={() => setShowPicker((p) => !p)}
+            activeOpacity={0.8}
           >
-            <Ionicons name={editMode ? 'save-outline' : 'checkmark-circle-outline'} size={18} color="#fff" />
-            <Text style={mds.confirmText}>{editMode ? 'Save Changes' : 'Mark as Given'}</Text>
+            <View style={mds.dateIconWrap}>
+              <Ionicons name="calendar-outline" size={17} color={COLORS.primary} />
+            </View>
+            <Text style={mds.dateText}>
+              {date.toLocaleDateString('en-KE', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </Text>
+            <Ionicons
+              name={showPicker ? 'chevron-up-outline' : 'chevron-down-outline'}
+              size={16}
+              color="#A0AEC0"
+            />
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+          {showPicker && <InlineDatePicker value={date} onChange={setDate} />}
+
+          {/* Facility */}
+          <Text style={mds.fieldLabel}>🏥 Health Facility</Text>
+          <View style={mds.inputWrapper}>
+            <View style={mds.inputIconWrap}>
+              <Ionicons name="business-outline" size={17} color={COLORS.primary} />
+            </View>
+            <TextInput
+              style={mds.input}
+              value={facility}
+              onChangeText={setFacility}
+              placeholder="e.g. Kenyatta National Hospital"
+              placeholderTextColor="#A0AEC0"
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* Action buttons — always reachable by scrolling */}
+          <View style={mds.btnRow}>
+            <TouchableOpacity style={mds.cancelBtn} onPress={onCancel} activeOpacity={0.8}>
+              <Text style={mds.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[mds.confirmBtn, { backgroundColor: cfg.accent }]}
+              onPress={() => onConfirm(facility, date)}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={editMode ? 'save-outline' : 'checkmark-circle-outline'}
+                size={18}
+                color="#fff"
+              />
+              <Text style={mds.confirmText}>
+                {editMode ? 'Save Changes' : 'Mark as Given'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Safe-area spacer */}
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </View>
     </KeyboardAvoidingView>
+  );
+
+  if (Platform.OS === 'web') {
+    if (!visible) return null;
+    return <View style={mds.webOverlay}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onCancel}
+    >
+      <View style={mds.overlay}>{sheetContent}</View>
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Unmark confirmation modal
+   Shown when user wants to undo a "given" or "missed" record
+───────────────────────────────────────────── */
+
+function UnmarkConfirmModal({
+  visible,
+  row,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  row: VaccineRow | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!row) return null;
+
+  const isGiven  = row.status === 'given';
+  const cfg      = STATUS_CONFIG[row.status];
+  const actionLabel = isGiven ? 'Unmark as Given' : 'Unmark as Missed';
+  const actionDesc  = isGiven
+    ? 'This will remove the immunization record and restore the vaccine to its calculated schedule status.'
+    : 'This will remove the missed record and restore the vaccine to its calculated schedule status.';
+
+  const content = (
+    <View style={um.card}>
+      <View style={um.handle} />
+
+      {/* Warning icon */}
+      <View style={um.iconWrap}>
+        <View style={[um.iconRing, { borderColor: '#FBBF24', backgroundColor: '#FFFBEB' }]}>
+          <Ionicons name="warning-outline" size={32} color="#D97706" />
+        </View>
+      </View>
+
+      <Text style={um.title}>{actionLabel}?</Text>
+
+      {/* Vaccine info chip */}
+      <View style={[um.vaccineChip, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+        <Text style={um.vaccineEmoji}>{cfg.emoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[um.vaccineName, { color: cfg.color }]}>
+            {row.schedule.vaccine_name} — Dose {row.schedule.dose_number}
+          </Text>
+          {row.immunization?.facility ? (
+            <Text style={um.vaccineDetail}>
+              📍 {row.immunization.facility}
+            </Text>
+          ) : null}
+          {row.immunization?.given_date ? (
+            <Text style={um.vaccineDetail}>
+              📅 {formatDate(row.immunization.given_date)}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      <Text style={um.desc}>{actionDesc}</Text>
+
+      <View style={um.btnRow}>
+        <TouchableOpacity style={um.keepBtn} onPress={onCancel} activeOpacity={0.8}>
+          <Text style={um.keepText}>Keep Record</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={um.removeBtn}
+          onPress={onConfirm}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="trash-outline" size={17} color="#fff" />
+          <Text style={um.removeText}>{actionLabel}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ height: 24 }} />
+    </View>
   );
 
   if (Platform.OS === 'web') {
     if (!visible) return null;
     return <View style={mds.webOverlay}>{content}</View>;
   }
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onCancel}
+    >
       <View style={mds.overlay}>{content}</View>
     </Modal>
   );
 }
 
 /* ─────────────────────────────────────────────
-   Vaccine card — premium
+   Vaccine card
 ───────────────────────────────────────────── */
 
 function VaccineCard({
-  row, onMarkGiven, onMarkMissed, onEdit,
+  row,
+  onMarkGiven,
+  onMarkMissed,
+  onEdit,
+  onUnmark,
 }: {
   row: VaccineRow;
   onMarkGiven: (row: VaccineRow) => void;
   onMarkMissed: (row: VaccineRow) => void;
   onEdit: (row: VaccineRow) => void;
+  onUnmark: (row: VaccineRow) => void;
 }) {
-  const cfg = STATUS_CONFIG[row.status];
+  const cfg      = STATUS_CONFIG[row.status];
   const dueLabel = getDueLabel(row);
   const facility = row.immunization?.facility ?? null;
-  const isGiven = row.status === 'given';
+  const isGiven  = row.status === 'given';
   const isMissed = row.status === 'missed';
+  const hasRecord = isGiven || isMissed;
 
   const scale = useRef(new Animated.Value(1)).current;
-  const onPressIn = () =>
+  const onPressIn  = () =>
     Animated.spring(scale, { toValue: 0.972, useNativeDriver: true, speed: 50 }).start();
   const onPressOut = () =>
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start();
@@ -326,9 +483,9 @@ function VaccineCard({
     <Animated.View style={{ transform: [{ scale }] }}>
       <TouchableOpacity
         style={[vc.card, { borderColor: cfg.border }]}
-        onPress={() => (isGiven ? onEdit(row) : undefined)}
-        onPressIn={isGiven ? onPressIn : undefined}
-        onPressOut={isGiven ? onPressOut : undefined}
+        onPress={isGiven ? () => onEdit(row) : undefined}
+        onPressIn={hasRecord ? onPressIn : undefined}
+        onPressOut={hasRecord ? onPressOut : undefined}
         activeOpacity={isGiven ? 0.9 : 1}
       >
         {/* Bold left accent bar */}
@@ -342,21 +499,38 @@ function VaccineCard({
               <Ionicons name={cfg.icon} size={11} color={cfg.color} />
               <Text style={[vc.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
             </View>
-            <View style={[vc.doseTag, { borderColor: cfg.border }]}>
-              <Text style={[vc.doseText, { color: cfg.color }]}>Dose {row.schedule.dose_number}</Text>
+            <View style={vc.topRowRight}>
+              <View style={[vc.doseTag, { borderColor: cfg.border }]}>
+                <Text style={[vc.doseText, { color: cfg.color }]}>
+                  Dose {row.schedule.dose_number}
+                </Text>
+              </View>
+              {/* Unmark button — shown for given or missed */}
+              {hasRecord && (
+                <TouchableOpacity
+                  style={vc.unmarkBtn}
+                  onPress={() => onUnmark(row)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="arrow-undo-outline" size={13} color="#9CA3AF" />
+                  <Text style={vc.unmarkText}>Undo</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
-          {/* Vaccine name */}
+          {/* Name */}
           <Text style={vc.name}>{row.schedule.vaccine_name}</Text>
 
           {/* Diseases */}
-          <Text style={vc.diseases} numberOfLines={2}>{row.schedule.diseases_covered}</Text>
+          <Text style={vc.diseases} numberOfLines={2}>
+            {row.schedule.diseases_covered}
+          </Text>
 
-          {/* Divider */}
           <View style={vc.divider} />
 
-          {/* Info row */}
+          {/* Info pills */}
           <View style={vc.infoRow}>
             {dueLabel !== null && (
               <View style={[vc.infoPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
@@ -370,7 +544,7 @@ function VaccineCard({
             )}
             {facility !== null && (
               <View style={vc.facilityPill}>
-                <Ionicons name="business-outline" size={11} color={COLORS.textMuted} />
+                <Ionicons name="business-outline" size={11} color="#718096" />
                 <Text style={vc.facilityText} numberOfLines={1}>{facility}</Text>
               </View>
             )}
@@ -388,7 +562,21 @@ function VaccineCard({
           {isGiven ? (
             <View style={[vc.editHint, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
               <Ionicons name="create-outline" size={13} color={cfg.accent} />
-              <Text style={[vc.editHintText, { color: cfg.accent }]}>Tap card to edit record</Text>
+              <Text style={[vc.editHintText, { color: cfg.accent }]}>
+                Tap card to edit record
+              </Text>
+            </View>
+          ) : isMissed ? (
+            /* Missed — only show "Mark Given" to correct */
+            <View style={vc.actions}>
+              <TouchableOpacity
+                style={[vc.primaryBtn, { backgroundColor: STATUS_CONFIG.given.accent }]}
+                onPress={() => onMarkGiven(row)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark-circle-outline" size={15} color="#fff" />
+                <Text style={vc.primaryBtnText}>Mark as Given</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={vc.actions}>
@@ -400,16 +588,18 @@ function VaccineCard({
                 <Ionicons name="checkmark-circle-outline" size={15} color="#fff" />
                 <Text style={vc.primaryBtnText}>Mark Given</Text>
               </TouchableOpacity>
-              {!isMissed && (
-                <TouchableOpacity
-                  style={vc.secondaryBtn}
-                  onPress={() => onMarkMissed(row)}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="close-circle-outline" size={15} color={STATUS_CONFIG.missed.accent} />
-                  <Text style={vc.secondaryBtnText}>Missed</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={vc.secondaryBtn}
+                onPress={() => onMarkMissed(row)}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={15}
+                  color={STATUS_CONFIG.missed.accent}
+                />
+                <Text style={vc.secondaryBtnText}>Missed</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -419,11 +609,14 @@ function VaccineCard({
 }
 
 /* ─────────────────────────────────────────────
-   Filter bar — premium chips
+   Filter bar
 ───────────────────────────────────────────── */
 
 function FilterBar({
-  active, counts, total, onChange,
+  active,
+  counts,
+  total,
+  onChange,
 }: {
   active: VaccineStatus | 'all';
   counts: Record<VaccineStatus, number>;
@@ -432,12 +625,16 @@ function FilterBar({
 }) {
   return (
     <View style={fb.wrapper}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={fb.row}>
-        {FILTER_OPTIONS.map(f => {
-          const isActive = active === f.key;
-          const count = f.key === 'all' ? total : counts[f.key as VaccineStatus];
-          const cfg = f.key !== 'all' ? STATUS_CONFIG[f.key as VaccineStatus] : null;
-          const activeBg = cfg ? cfg.accent : COLORS.primary;
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={fb.row}
+      >
+        {FILTER_OPTIONS.map((f) => {
+          const isActive   = active === f.key;
+          const count      = f.key === 'all' ? total : counts[f.key as VaccineStatus];
+          const cfg        = f.key !== 'all' ? STATUS_CONFIG[f.key as VaccineStatus] : null;
+          const activeBg   = cfg ? cfg.accent : COLORS.primary;
           return (
             <TouchableOpacity
               key={f.key}
@@ -448,14 +645,13 @@ function FilterBar({
               onPress={() => onChange(f.key)}
               activeOpacity={0.75}
             >
-              {f.key !== 'all' && cfg && (
+              {f.key !== 'all' && cfg ? (
                 <Text style={fb.emoji}>{cfg.emoji}</Text>
-              )}
-              {f.key === 'all' && (
+              ) : (
                 <Ionicons
                   name="apps-outline"
                   size={13}
-                  color={isActive ? '#fff' : COLORS.textSecondary}
+                  color={isActive ? '#fff' : '#4A5568'}
                 />
               )}
               <Text style={[fb.label, isActive && fb.labelActive]}>{f.label}</Text>
@@ -471,7 +667,7 @@ function FilterBar({
 }
 
 /* ─────────────────────────────────────────────
-   Circular progress ring
+   Progress bar
 ───────────────────────────────────────────── */
 
 function CircleProgress({ given, total }: { given: number; total: number }) {
@@ -486,19 +682,15 @@ function CircleProgress({ given, total }: { given: number; total: number }) {
     }).start();
   }, [pct]);
 
-  const pctInt = Math.round(pct * 100);
-
   return (
     <View style={cp.wrap}>
-      {/* Track */}
       <View style={cp.track}>
-        {/* Fill bar */}
         <Animated.View
           style={[
             cp.fill,
             {
               width: widthAnim.interpolate({
-                inputRange: [0, 1],
+                inputRange:  [0, 1],
                 outputRange: ['0%', '100%'],
               }),
             },
@@ -506,7 +698,7 @@ function CircleProgress({ given, total }: { given: number; total: number }) {
         />
       </View>
       <View style={cp.labels}>
-        <Text style={cp.pct}>{pctInt}%</Text>
+        <Text style={cp.pct}>{Math.round(pct * 100)}%</Text>
         <Text style={cp.sub}>{given}/{total} done</Text>
       </View>
     </View>
@@ -524,14 +716,16 @@ export default function VaccinesScreen() {
     vaccineRows, loading,
     fetchSchedules, fetchImmunizations, computeRows,
     seedScheduleIfEmpty, markAsGiven, markAsMissed, updateImmunization,
+    unmarkImmunization,   // ← must exist in your store; see note below
   } = useVaccineStore();
 
-  const [filter, setFilter] = useState<VaccineStatus | 'all'>('all');
-  const [modalRow, setModalRow] = useState<VaccineRow | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [filter,      setFilter]      = useState<VaccineStatus | 'all'>('all');
+  const [modalRow,    setModalRow]    = useState<VaccineRow | null>(null);
+  const [editMode,    setEditMode]    = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [unmarkRow,   setUnmarkRow]   = useState<VaccineRow | null>(null);
 
-  const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
+  const activeChild = children.find((c) => c.id === selectedChildId) ?? children[0];
 
   const load = useCallback(async () => {
     await seedScheduleIfEmpty();
@@ -544,17 +738,28 @@ export default function VaccinesScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* Handlers */
+  /* ── Handlers ── */
+
   const handleMarkGiven = async (facility: string, date: Date) => {
     if (!modalRow || !activeChild) return;
     setSaving(true);
     try {
       if (editMode && modalRow.immunization?.id) {
         await updateImmunization(
-          modalRow.immunization.id, activeChild.id, facility, date, activeChild.date_of_birth,
+          modalRow.immunization.id,
+          activeChild.id,
+          facility,
+          date,
+          activeChild.date_of_birth,
         );
       } else {
-        await markAsGiven(modalRow.schedule.id, activeChild.id, facility, date, activeChild.date_of_birth);
+        await markAsGiven(
+          modalRow.schedule.id,
+          activeChild.id,
+          facility,
+          date,
+          activeChild.date_of_birth,
+        );
       }
       const fresh = await fetchImmunizations(activeChild.id);
       computeRows(activeChild.date_of_birth, fresh);
@@ -562,7 +767,9 @@ export default function VaccinesScreen() {
       setEditMode(false);
     } catch (err: any) {
       const msg = err?.message ?? 'Failed to record';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
+      Platform.OS === 'web'
+        ? window.alert(msg)
+        : Alert.alert('Error', msg);
     } finally {
       setSaving(false);
     }
@@ -577,27 +784,60 @@ export default function VaccinesScreen() {
           computeRows(activeChild.date_of_birth, fresh);
         })
         .catch((err: any) => {
-          Platform.OS === 'web' ? window.alert(err?.message) : Alert.alert('Error', err?.message);
+          Platform.OS === 'web'
+            ? window.alert(err?.message)
+            : Alert.alert('Error', err?.message);
         });
     };
     Platform.OS === 'web'
       ? window.confirm('Mark this vaccine as missed?') && doMiss()
-      : Alert.alert('Mark as Missed', 'Record this vaccine as missed?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Mark Missed', style: 'destructive', onPress: doMiss },
-        ]);
+      : Alert.alert(
+          'Mark as Missed',
+          'Record this vaccine as missed?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Mark Missed', style: 'destructive', onPress: doMiss },
+          ],
+        );
   };
 
-  /* Stats */
+  const handleUnmark = async () => {
+    if (!unmarkRow || !activeChild) return;
+    setSaving(true);
+    try {
+      if (unmarkRow.immunization?.id) {
+        await unmarkImmunization(
+          unmarkRow.immunization.id,
+          activeChild.id,
+          activeChild.date_of_birth,
+        );
+      }
+      const fresh = await fetchImmunizations(activeChild.id);
+      computeRows(activeChild.date_of_birth, fresh);
+      setUnmarkRow(null);
+    } catch (err: any) {
+      const msg = err?.message ?? 'Failed to unmark';
+      Platform.OS === 'web'
+        ? window.alert(msg)
+        : Alert.alert('Error', msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── Derived data ── */
+
   const counts = {
-    due: vaccineRows.filter(r => r.status === 'due').length,
-    upcoming: vaccineRows.filter(r => r.status === 'upcoming').length,
-    given: vaccineRows.filter(r => r.status === 'given').length,
-    missed: vaccineRows.filter(r => r.status === 'missed').length,
+    due:      vaccineRows.filter((r) => r.status === 'due').length,
+    upcoming: vaccineRows.filter((r) => r.status === 'upcoming').length,
+    given:    vaccineRows.filter((r) => r.status === 'given').length,
+    missed:   vaccineRows.filter((r) => r.status === 'missed').length,
   };
-  const filtered = filter === 'all' ? vaccineRows : vaccineRows.filter(r => r.status === filter);
+  const filtered =
+    filter === 'all' ? vaccineRows : vaccineRows.filter((r) => r.status === filter);
 
-  /* No child */
+  /* ── No child selected ── */
+
   if (!activeChild) {
     return (
       <View style={s.emptyContainer}>
@@ -605,8 +845,14 @@ export default function VaccinesScreen() {
           <Text style={{ fontSize: 36 }}>💉</Text>
         </View>
         <Text style={s.emptyTitle}>No child selected</Text>
-        <Text style={s.emptySub}>Go to the Children tab to select or add a child first.</Text>
-        <TouchableOpacity style={s.goBtn} onPress={() => router.push('/(tabs)/children' as any)}>
+        <Text style={s.emptySub}>
+          Go to the Children tab to select or add a child first.
+        </Text>
+        <TouchableOpacity
+          style={s.goBtn}
+          onPress={() => router.push('/(tabs)/children' as any)}
+          activeOpacity={0.85}
+        >
           <Ionicons name="people-outline" size={16} color="#fff" />
           <Text style={s.goBtnText}>Go to Children</Text>
         </TouchableOpacity>
@@ -616,8 +862,11 @@ export default function VaccinesScreen() {
 
   const isFemale = activeChild.sex === 'female';
 
+  /* ── Main render ── */
+
   return (
     <View style={s.container}>
+      {/* Modals rendered at root level */}
       <MarkGivenModal
         visible={!!modalRow}
         row={modalRow}
@@ -625,10 +874,15 @@ export default function VaccinesScreen() {
         onConfirm={handleMarkGiven}
         onCancel={() => { setModalRow(null); setEditMode(false); }}
       />
+      <UnmarkConfirmModal
+        visible={!!unmarkRow}
+        row={unmarkRow}
+        onConfirm={handleUnmark}
+        onCancel={() => setUnmarkRow(null)}
+      />
 
       {/* ── HERO HEADER ── */}
       <View style={s.header}>
-        {/* Decorative circles */}
         <View style={s.heroDeco1} />
         <View style={s.heroDeco2} />
 
@@ -638,16 +892,16 @@ export default function VaccinesScreen() {
             <Text style={s.headerTitle}>Immunizations</Text>
             <Text style={s.headerSub}>Kenya Expanded Programme on Immunization</Text>
           </View>
-          {saving
-            ? <ActivityIndicator color="rgba(255,255,255,0.8)" size="small" />
-            : (
-              <View style={s.headerIconWrap}>
-                <Ionicons name="shield-checkmark" size={22} color="rgba(255,255,255,0.9)" />
-              </View>
-            )}
+          {saving ? (
+            <ActivityIndicator color="rgba(255,255,255,0.8)" size="small" />
+          ) : (
+            <View style={s.headerIconWrap}>
+              <Ionicons name="shield-checkmark" size={22} color="rgba(255,255,255,0.9)" />
+            </View>
+          )}
         </View>
 
-        {/* Child strip inside hero */}
+        {/* Child strip */}
         <View style={s.childStrip}>
           <View style={[s.avatar, { backgroundColor: isFemale ? '#FDE8F5' : '#E8F0FD' }]}>
             <Text style={{ fontSize: 18 }}>{isFemale ? '👧' : '👦'}</Text>
@@ -664,25 +918,33 @@ export default function VaccinesScreen() {
       <View style={s.statsRow}>
         {(
           [
-            { key: 'due' as VaccineStatus, label: 'Due', icon: 'alert-circle' as const },
-            { key: 'upcoming' as VaccineStatus, label: 'Upcoming', icon: 'time-outline' as const },
-            { key: 'given' as VaccineStatus, label: 'Given', icon: 'checkmark-circle' as const },
-            { key: 'missed' as VaccineStatus, label: 'Missed', icon: 'close-circle' as const },
-          ]
+            { key: 'due'      as VaccineStatus, label: 'Due',      icon: 'alert-circle'     as const },
+            { key: 'upcoming' as VaccineStatus, label: 'Upcoming', icon: 'time-outline'     as const },
+            { key: 'given'    as VaccineStatus, label: 'Given',    icon: 'checkmark-circle' as const },
+            { key: 'missed'   as VaccineStatus, label: 'Missed',   icon: 'close-circle'     as const },
+          ] as const
         ).map(({ key, label, icon }) => {
-          const cfg = STATUS_CONFIG[key];
+          const cfg      = STATUS_CONFIG[key];
           const isActive = filter === key;
           return (
             <TouchableOpacity
               key={key}
               style={[
                 s.statCard,
-                { backgroundColor: isActive ? cfg.accent : '#fff', borderColor: isActive ? cfg.accent : cfg.border },
+                {
+                  backgroundColor: isActive ? cfg.accent : '#fff',
+                  borderColor:     isActive ? cfg.accent : cfg.border,
+                },
               ]}
               onPress={() => setFilter(key)}
               activeOpacity={0.8}
             >
-              <View style={[s.statIconWrap, { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : cfg.bg }]}>
+              <View
+                style={[
+                  s.statIconWrap,
+                  { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : cfg.bg },
+                ]}
+              >
                 <Ionicons name={icon} size={16} color={isActive ? '#fff' : cfg.accent} />
               </View>
               <Text style={[s.statNum, { color: isActive ? '#fff' : cfg.accent }]}>
@@ -697,7 +959,12 @@ export default function VaccinesScreen() {
       </View>
 
       {/* ── FILTER BAR ── */}
-      <FilterBar active={filter} counts={counts} total={vaccineRows.length} onChange={setFilter} />
+      <FilterBar
+        active={filter}
+        counts={counts}
+        total={vaccineRows.length}
+        onChange={setFilter}
+      />
 
       {/* ── LIST ── */}
       {loading ? (
@@ -722,12 +989,13 @@ export default function VaccinesScreen() {
         <ScrollView
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Section label */}
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>
               {filter === 'all'
-                ? `All Vaccines`
+                ? 'All Vaccines'
                 : `${STATUS_CONFIG[filter as VaccineStatus].label} · ${filtered.length}`}
             </Text>
             {filter !== 'all' && (
@@ -737,16 +1005,19 @@ export default function VaccinesScreen() {
             )}
           </View>
 
-          {filtered.map(row => (
+          {filtered.map((row) => (
             <VaccineCard
               key={row.schedule.id}
               row={row}
-              onMarkGiven={r => { setEditMode(false); setModalRow(r); }}
+              onMarkGiven={(r) => { setEditMode(false); setModalRow(r); }}
               onMarkMissed={handleMarkMissed}
-              onEdit={r => { setEditMode(true); setModalRow(r); }}
+              onEdit={(r) => { setEditMode(true); setModalRow(r); }}
+              onUnmark={(r) => setUnmarkRow(r)}
             />
           ))}
-          <View style={{ height: 140 }} />
+
+          {/* Bottom spacer — clears tab bar + FAB */}
+          <View style={{ height: 160 }} />
         </ScrollView>
       )}
     </View>
@@ -760,7 +1031,6 @@ export default function VaccinesScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F0F4F8' },
 
-  /* Empty — no child */
   emptyContainer: {
     flex: 1, backgroundColor: '#F0F4F8',
     alignItems: 'center', justifyContent: 'center', padding: 36,
@@ -771,34 +1041,35 @@ const s = StyleSheet.create({
     marginBottom: 20, borderWidth: 2, borderColor: '#90C5F7',
   },
   emptyTitle: { fontSize: 22, fontWeight: '800', color: '#1A202C', marginBottom: 10 },
-  emptySub: { fontSize: 14, color: '#4A5568', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
+  emptySub: {
+    fontSize: 14, color: '#4A5568', textAlign: 'center',
+    lineHeight: 22, marginBottom: 28,
+  },
   goBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#208AEF', borderRadius: 16,
     paddingHorizontal: 28, paddingVertical: 15,
-    ...Platform.select({ ios: { shadowColor: '#208AEF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }), elevation: 6,
+    ...Platform.select({
+      ios:     { shadowColor: '#208AEF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
   goBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
-  /* Hero header */
   header: {
     backgroundColor: '#208AEF',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+    paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20,
     overflow: 'hidden',
   },
   heroDeco1: {
     position: 'absolute', width: 220, height: 220, borderRadius: 110,
-    borderWidth: 40, borderColor: 'rgba(255,255,255,0.06)',
-    top: -60, right: -60,
+    borderWidth: 40, borderColor: 'rgba(255,255,255,0.06)', top: -60, right: -60,
   },
   heroDeco2: {
     position: 'absolute', width: 130, height: 130, borderRadius: 65,
-    borderWidth: 24, borderColor: 'rgba(255,255,255,0.05)',
-    bottom: 20, left: -30,
+    borderWidth: 24, borderColor: 'rgba(255,255,255,0.05)', bottom: 20, left: -30,
   },
   headerTop: {
     flexDirection: 'row', justifyContent: 'space-between',
@@ -808,18 +1079,14 @@ const s = StyleSheet.create({
     fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '700',
     letterSpacing: 0.4, marginBottom: 4,
   },
-  headerTitle: {
-    fontSize: 28, fontWeight: '800', color: '#fff',
-    letterSpacing: -0.5, lineHeight: 32,
-  },
-  headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 },
+  headerTitle:    { fontSize: 28, fontWeight: '800', color: '#fff', letterSpacing: -0.5, lineHeight: 32 },
+  headerSub:      { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 },
   headerIconWrap: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
 
-  /* Child strip (inside hero) */
   childStrip: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: 'rgba(255,255,255,0.14)',
@@ -832,40 +1099,37 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
   },
   childName: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
-  childDob: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  childDob:  { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
-  /* Stats */
   statsRow: {
-    flexDirection: 'row', paddingHorizontal: 16, paddingTop: 18,
-    paddingBottom: 6, gap: 10,
+    flexDirection: 'row', paddingHorizontal: 16,
+    paddingTop: 18, paddingBottom: 6, gap: 10,
   },
   statCard: {
     flex: 1, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 6,
     alignItems: 'center', borderWidth: 1.5,
-    ...Platform.select({ ios: { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }, android: { elevation: 6 }, default: {} }), elevation: 2,
+    ...Platform.select({
+      ios:     { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 3 },
+      default: {},
+    }),
   },
   statIconWrap: {
     width: 32, height: 32, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center', marginBottom: 6,
   },
-  statNum: { fontSize: 22, fontWeight: '800', lineHeight: 26 },
+  statNum:   { fontSize: 22, fontWeight: '800', lineHeight: 26 },
   statLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
 
-  /* Filter bar */
-  /* (styles in fb object below) */
-
-  /* Section header */
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 12,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1A202C' },
+  sectionTitle:  { fontSize: 16, fontWeight: '800', color: '#1A202C' },
   sectionAction: { fontSize: 13, fontWeight: '700', color: '#208AEF' },
 
-  /* List */
   list: { paddingHorizontal: 16, paddingTop: 16 },
 
-  /* Loading / empty */
   centerBox: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40,
   },
@@ -873,14 +1137,13 @@ const s = StyleSheet.create({
     width: 72, height: 72, borderRadius: 36,
     backgroundColor: '#E6F4FE', alignItems: 'center', justifyContent: 'center',
   },
-  loadingText: { fontSize: 14, color: '#718096', marginTop: 4, fontWeight: '500' },
-  emptyListIconWrap: {
+  loadingText:      { fontSize: 14, color: '#718096', marginTop: 4, fontWeight: '500' },
+  emptyListIconWrap:{
     width: 88, height: 88, borderRadius: 44,
-    backgroundColor: '#E8F8F1', alignItems: 'center', justifyContent: 'center',
-    marginBottom: 4,
+    backgroundColor: '#E8F8F1', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
   },
   emptyListTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C' },
-  emptyListSub: { fontSize: 13, color: '#A0AEC0', fontWeight: '500' },
+  emptyListSub:   { fontSize: 13, color: '#A0AEC0', fontWeight: '500' },
   resetBtn: {
     marginTop: 8, backgroundColor: '#208AEF', borderRadius: 12,
     paddingHorizontal: 24, paddingVertical: 12,
@@ -888,54 +1151,51 @@ const s = StyleSheet.create({
   resetBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
 
-/* Vaccine card */
 const vc = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 12,
-    overflow: 'hidden',
-
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderRadius: 20, borderWidth: 1, marginBottom: 12, overflow: 'hidden',
     ...Platform.select({
-
-      ios: { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10 },
-
-      android: { elevation: 8 },
-
+      ios:     { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10 },
+      android: { elevation: 5 },
       default: {},
-
     }),
-    elevation: 3,
   },
   accentBar: { width: 5 },
-  body: { flex: 1, padding: 14 },
+  body:      { flex: 1, padding: 14 },
 
   topRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 8,
+  },
+  topRowRight: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
   },
   badge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 20, borderWidth: 1,
   },
-  badgeEmoji: { fontSize: 11 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
+  badgeEmoji:  { fontSize: 11 },
+  badgeText:   { fontSize: 11, fontWeight: '700' },
   doseTag: {
     backgroundColor: '#F7F8FC', paddingHorizontal: 10,
-    paddingVertical: 5, borderRadius: 20,
-    borderWidth: 1,
+    paddingVertical: 5, borderRadius: 20, borderWidth: 1,
   },
   doseText: { fontSize: 11, fontWeight: '700' },
 
-  name: { fontSize: 17, fontWeight: '800', color: '#1A202C', marginBottom: 3, letterSpacing: -0.3 },
-  diseases: { fontSize: 12, color: '#718096', lineHeight: 18, marginBottom: 10 },
-
-  divider: {
-    height: 1, backgroundColor: '#F0F4F8', marginBottom: 10,
+  /* Undo button */
+  unmarkBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 20, backgroundColor: '#F9FAFB',
+    borderWidth: 1, borderColor: '#E5E7EB',
   },
+  unmarkText: { fontSize: 10, fontWeight: '700', color: '#9CA3AF' },
+
+  name:     { fontSize: 17, fontWeight: '800', color: '#1A202C', marginBottom: 3, letterSpacing: -0.3 },
+  diseases: { fontSize: 12, color: '#718096', lineHeight: 18, marginBottom: 10 },
+  divider:  { height: 1, backgroundColor: '#F0F4F8', marginBottom: 10 },
 
   infoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   infoPill: {
@@ -955,8 +1215,8 @@ const vc = StyleSheet.create({
   notesChip: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 6,
     backgroundColor: '#E6F4FE', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 6,
-    marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#208AEF',
+    paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10,
+    borderLeftWidth: 3, borderLeftColor: '#208AEF',
   },
   notesText: { fontSize: 11, color: '#4A5568', flex: 1, lineHeight: 16 },
 
@@ -965,7 +1225,11 @@ const vc = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6,
     borderRadius: 12, paddingVertical: 12,
-    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 }, android: { elevation: 6 }, default: {} }), elevation: 2,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
+      android: { elevation: 3 },
+      default: {},
+    }),
   },
   primaryBtnText: { fontSize: 13, fontWeight: '800', color: '#fff' },
   secondaryBtn: {
@@ -983,94 +1247,95 @@ const vc = StyleSheet.create({
   editHintText: { fontSize: 12, fontWeight: '700' },
 });
 
-/* Filter bar */
 const fb = StyleSheet.create({
   wrapper: {
     backgroundColor: '#fff',
     borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
     paddingVertical: 12,
-    ...Platform.select({ ios: { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 }, android: { elevation: 6 }, default: {} }), elevation: 1,
+    ...Platform.select({
+      ios:     { shadowColor: '#1A3A6B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 },
+      android: { elevation: 2 },
+      default: {},
+    }),
   },
-  row: { paddingHorizontal: 16, gap: 8, flexDirection: 'row', alignItems: 'center' },
-  chip: {
+  row:   { paddingHorizontal: 16, gap: 8, flexDirection: 'row', alignItems: 'center' },
+  chip:  {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 9999, backgroundColor: '#fff',
     borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  emoji: { fontSize: 12 },
-  label: { fontSize: 13, fontWeight: '700', color: '#4A5568' },
-  labelActive: { color: '#fff' },
-  countBadge: {
+  emoji:            { fontSize: 12 },
+  label:            { fontSize: 13, fontWeight: '700', color: '#4A5568' },
+  labelActive:      { color: '#fff' },
+  countBadge:       {
     backgroundColor: '#F0F4F8', borderRadius: 10,
     paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
   },
   countBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  countText: { fontSize: 11, fontWeight: '700', color: '#718096' },
-  countTextActive: { color: '#fff' },
+  countText:        { fontSize: 11, fontWeight: '700', color: '#718096' },
+  countTextActive:  { color: '#fff' },
 });
 
-/* Circle progress */
 const cp = StyleSheet.create({
-  wrap: { alignItems: 'flex-end', gap: 4, minWidth: 80 },
-  track: {
+  wrap:   { alignItems: 'flex-end', gap: 4, minWidth: 80 },
+  track:  {
     width: 80, height: 6, borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden',
   },
-  fill: {
-    height: '100%', borderRadius: 3,
-    backgroundColor: '#fff',
-  },
+  fill:   { height: '100%', borderRadius: 3, backgroundColor: '#fff' },
   labels: { alignItems: 'flex-end' },
-  pct: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  sub: { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  pct:    { fontSize: 14, fontWeight: '800', color: '#fff' },
+  sub:    { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
 });
 
-/* Inline date picker */
 const ip = StyleSheet.create({
   wrapper: {
     backgroundColor: '#F7F8FC', borderRadius: 14, padding: 14,
-    marginTop: 8, marginBottom: 8,
-    borderWidth: 1.5, borderColor: '#E2E8F0',
+    marginTop: 8, marginBottom: 8, borderWidth: 1.5, borderColor: '#E2E8F0',
   },
   label: {
     fontSize: 11, fontWeight: '700', color: '#A0AEC0',
-    marginTop: 10, marginBottom: 6, letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    marginTop: 10, marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase',
   },
-  row: { flexDirection: 'row', gap: 6 },
-  chip: {
+  row:            { flexDirection: 'row', gap: 6 },
+  chip:           {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9999,
     backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  chipActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#4A5568' },
+  chipActive:     { backgroundColor: '#208AEF', borderColor: '#208AEF' },
+  chipText:       { fontSize: 13, fontWeight: '600', color: '#4A5568' },
   chipTextActive: { color: '#fff', fontWeight: '800' },
 });
 
-/* Modal */
 const mds = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(10,20,50,0.6)', justifyContent: 'flex-end' },
+  overlay:    { flex: 1, backgroundColor: 'rgba(10,20,50,0.6)', justifyContent: 'flex-end' },
   webOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     zIndex: 999, backgroundColor: 'rgba(10,20,50,0.6)',
+  },
+  kavWrapper: {
+    width: '100%',
+    maxHeight: '92%',
   },
   card: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 22, paddingTop: 12,
-    maxHeight: '92%',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 16 },
+      android: { elevation: 16 },
+      default: {},
+    }),
   },
   handle: {
     width: 44, height: 4, borderRadius: 2,
-    backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20,
+    backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16,
   },
-
-  /* Vaccine hero strip */
   heroStripe: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     padding: 16, borderRadius: 20, borderWidth: 1.5,
-    marginBottom: 16, overflow: 'hidden', position: 'relative',
+    marginBottom: 4, overflow: 'hidden', position: 'relative',
   },
   heroCircle: {
     position: 'absolute', width: 100, height: 100, borderRadius: 50,
@@ -1079,22 +1344,25 @@ const mds = StyleSheet.create({
   iconCircle: {
     width: 48, height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center',
-    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 }, android: { elevation: 6 }, default: {} }), elevation: 3,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
+      android: { elevation: 4 },
+      default: {},
+    }),
   },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  heroEmoji: { fontSize: 16 },
-  heroBadge: {
-    borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 3,
-  },
+  heroTopRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  heroEmoji:     { fontSize: 16 },
+  heroBadge:     { borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 3 },
   heroBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-  title: { fontSize: 17, fontWeight: '800', color: '#1A202C', letterSpacing: -0.2 },
-  subtitle: { fontSize: 12, color: '#718096', marginTop: 2, lineHeight: 17 },
+  title:         { fontSize: 17, fontWeight: '800', color: '#1A202C', letterSpacing: -0.2 },
+  subtitle:      { fontSize: 12, color: '#718096', marginTop: 2, lineHeight: 17 },
 
-  /* Info tip */
+  scrollContent: { paddingTop: 4 },
+
   infoTip: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
     backgroundColor: '#E6F4FE', borderRadius: 12, padding: 12,
-    borderLeftWidth: 3, borderLeftColor: '#208AEF', marginBottom: 4,
+    borderLeftWidth: 3, borderLeftColor: '#208AEF', marginBottom: 4, marginTop: 12,
   },
   infoTipText: { flex: 1, fontSize: 12, color: '#4A5568', lineHeight: 17, fontWeight: '500' },
 
@@ -1108,7 +1376,7 @@ const mds = StyleSheet.create({
     padding: 14, borderWidth: 1.5, borderColor: '#E2E8F0',
   },
   dateRowActive: { borderColor: '#208AEF', backgroundColor: '#F0F8FF' },
-  dateIconWrap: {
+  dateIconWrap:  {
     width: 32, height: 32, borderRadius: 9, backgroundColor: '#E6F4FE',
     alignItems: 'center', justifyContent: 'center',
   },
@@ -1124,7 +1392,10 @@ const mds = StyleSheet.create({
     width: 32, height: 32, borderRadius: 9, backgroundColor: '#E6F4FE',
     alignItems: 'center', justifyContent: 'center', marginRight: 10,
   },
-  input: { flex: 1, fontSize: 15, color: '#1A202C', paddingVertical: 14, fontWeight: '500' },
+  input: {
+    flex: 1, fontSize: 15, color: '#1A202C',
+    paddingVertical: 14, fontWeight: '500',
+  },
 
   btnRow: { flexDirection: 'row', gap: 12, marginTop: 28, marginBottom: 8 },
   cancelBtn: {
@@ -1132,12 +1403,72 @@ const mds = StyleSheet.create({
     paddingVertical: 16, alignItems: 'center',
     borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  cancelText: { color: '#718096', fontWeight: '800', fontSize: 15 },
-  confirmBtn: {
+  cancelText:  { color: '#718096', fontWeight: '800', fontSize: 15 },
+  confirmBtn:  {
     flex: 2, borderRadius: 14, paddingVertical: 16,
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 8,
-    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
   confirmText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+});
+
+/* Unmark modal styles */
+const um = StyleSheet.create({
+  card: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 24, paddingTop: 12,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 16 },
+      android: { elevation: 16 },
+      default: {},
+    }),
+  },
+  handle: {
+    width: 44, height: 4, borderRadius: 2,
+    backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20,
+  },
+  iconWrap: { alignItems: 'center', marginBottom: 16 },
+  iconRing: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2,
+  },
+  title: {
+    fontSize: 20, fontWeight: '800', color: '#1A202C',
+    textAlign: 'center', marginBottom: 16, letterSpacing: -0.3,
+  },
+  vaccineChip: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    padding: 14, borderRadius: 16, borderWidth: 1.5, marginBottom: 16,
+  },
+  vaccineEmoji:  { fontSize: 22, marginTop: 2 },
+  vaccineName:   { fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  vaccineDetail: { fontSize: 12, color: '#718096', marginTop: 2 },
+  desc: {
+    fontSize: 13, color: '#718096', textAlign: 'center',
+    lineHeight: 20, marginBottom: 24,
+  },
+  btnRow: { flexDirection: 'row', gap: 12, marginBottom: 8 },
+  keepBtn: {
+    flex: 1, backgroundColor: '#F7F8FC', borderRadius: 14,
+    paddingVertical: 16, alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#E2E8F0',
+  },
+  keepText: { color: '#4A5568', fontWeight: '800', fontSize: 14 },
+  removeBtn: {
+    flex: 2, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 8,
+    backgroundColor: '#E24B4A', borderRadius: 14, paddingVertical: 16,
+    ...Platform.select({
+      ios:     { shadowColor: '#E24B4A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      android: { elevation: 6 },
+      default: {},
+    }),
+  },
+  removeText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 });
