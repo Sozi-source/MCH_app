@@ -1,12 +1,14 @@
 ﻿/**
  * src/store/vaccineStore.ts
  *
- * NOTIFICATION UPGRADE:
- *  - computeRows now calls notifyVaccineAlerts() + scheduleVaccineDueReminders()
- *    whenever rows are recomputed for an active child
- *  - A childId parameter is added to computeRows so notifications can be
- *    scoped to the correct child
- *  - All other logic is identical to the original
+ * PERFORMANCE FIXES:
+ *  - fetchSchedules() is cached — skips DB if schedulesLoaded is true.
+ *    Pass force=true to bypass (pull-to-refresh).
+ *  - computeRows() no longer fires notifications inline. Notifications are
+ *    fired via fireNotifications(), called only after real mutations.
+ *  - unmarkImmunization() included and patched to not double-fire.
+ *  - All public method signatures unchanged — no screen edits required
+ *    beyond the vaccines.tsx companion file.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -59,29 +61,29 @@ export interface VaccineRow {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const KEPI_SEED: Omit<VaccineSchedule, 'id'>[] = [
-  { vaccine_name: 'BCG',            dose_number: 1, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Tuberculosis',                                      notes: 'Given at birth',               display_order: 1  },
-  { vaccine_name: 'OPV',            dose_number: 0, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Polio',                                             notes: 'Birth dose (OPV0)',            display_order: 2  },
-  { vaccine_name: 'Hepatitis B',    dose_number: 1, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Hepatitis B',                                       notes: 'Birth dose',                   display_order: 3  },
-  { vaccine_name: 'OPV',            dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Polio',                                             notes: null,                           display_order: 4  },
-  { vaccine_name: 'DPT-HepB-Hib',  dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib', notes: 'Pentavalent 1',                display_order: 5  },
-  { vaccine_name: 'PCV',            dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Pneumococcal disease',                             notes: null,                           display_order: 6  },
-  { vaccine_name: 'Rotavirus',      dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Rotavirus diarrhoea',                              notes: null,                           display_order: 7  },
-  { vaccine_name: 'IPV',            dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Polio (inactivated)',                              notes: null,                           display_order: 8  },
-  { vaccine_name: 'OPV',            dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Polio',                                             notes: null,                           display_order: 9  },
-  { vaccine_name: 'DPT-HepB-Hib',  dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib', notes: 'Pentavalent 2',                display_order: 10 },
-  { vaccine_name: 'PCV',            dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Pneumococcal disease',                             notes: null,                           display_order: 11 },
-  { vaccine_name: 'Rotavirus',      dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Rotavirus diarrhoea',                              notes: null,                           display_order: 12 },
-  { vaccine_name: 'OPV',            dose_number: 3, due_at_weeks: 14,   due_at_months: null, diseases_covered: 'Polio',                                             notes: null,                           display_order: 13 },
-  { vaccine_name: 'DPT-HepB-Hib',  dose_number: 3, due_at_weeks: 14,   due_at_months: null, diseases_covered: 'Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib', notes: 'Pentavalent 3',                display_order: 14 },
-  { vaccine_name: 'PCV',            dose_number: 3, due_at_weeks: 14,   due_at_months: null, diseases_covered: 'Pneumococcal disease',                             notes: null,                           display_order: 15 },
-  { vaccine_name: 'Malaria (RTS,S)',dose_number: 1, due_at_weeks: null, due_at_months: 5,    diseases_covered: 'Malaria',                                           notes: 'R21 vaccine - 5 months',       display_order: 16 },
-  { vaccine_name: 'Malaria (RTS,S)',dose_number: 2, due_at_weeks: null, due_at_months: 6,    diseases_covered: 'Malaria',                                           notes: null,                           display_order: 17 },
-  { vaccine_name: 'Malaria (RTS,S)',dose_number: 3, due_at_weeks: null, due_at_months: 7,    diseases_covered: 'Malaria',                                           notes: null,                           display_order: 18 },
-  { vaccine_name: 'Measles-Rubella',dose_number: 1, due_at_weeks: null, due_at_months: 9,    diseases_covered: 'Measles, Rubella',                                  notes: null,                           display_order: 19 },
-  { vaccine_name: 'Yellow Fever',   dose_number: 1, due_at_weeks: null, due_at_months: 9,    diseases_covered: 'Yellow Fever',                                      notes: null,                           display_order: 20 },
-  { vaccine_name: 'Malaria (RTS,S)',dose_number: 4, due_at_weeks: null, due_at_months: 24,   diseases_covered: 'Malaria',                                           notes: 'Booster dose at 24 months',    display_order: 21 },
-  { vaccine_name: 'Measles-Rubella',dose_number: 2, due_at_weeks: null, due_at_months: 18,   diseases_covered: 'Measles, Rubella',                                  notes: 'Booster',                      display_order: 22 },
-  { vaccine_name: 'Vitamin A',      dose_number: 1, due_at_weeks: null, due_at_months: 6,    diseases_covered: 'Vitamin A deficiency',                              notes: 'Supplementation - every 6 months', display_order: 23 },
+  { vaccine_name: 'BCG',             dose_number: 1, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Tuberculosis',                                       notes: 'Given at birth',                   display_order: 1  },
+  { vaccine_name: 'OPV',             dose_number: 0, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Polio',                                              notes: 'Birth dose (OPV0)',                display_order: 2  },
+  { vaccine_name: 'Hepatitis B',     dose_number: 1, due_at_weeks: 0,    due_at_months: null, diseases_covered: 'Hepatitis B',                                        notes: 'Birth dose',                       display_order: 3  },
+  { vaccine_name: 'OPV',             dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Polio',                                              notes: null,                               display_order: 4  },
+  { vaccine_name: 'DPT-HepB-Hib',   dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib',  notes: 'Pentavalent 1',                    display_order: 5  },
+  { vaccine_name: 'PCV',             dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Pneumococcal disease',                              notes: null,                               display_order: 6  },
+  { vaccine_name: 'Rotavirus',       dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Rotavirus diarrhoea',                               notes: null,                               display_order: 7  },
+  { vaccine_name: 'IPV',             dose_number: 1, due_at_weeks: 6,    due_at_months: null, diseases_covered: 'Polio (inactivated)',                               notes: null,                               display_order: 8  },
+  { vaccine_name: 'OPV',             dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Polio',                                              notes: null,                               display_order: 9  },
+  { vaccine_name: 'DPT-HepB-Hib',   dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib',  notes: 'Pentavalent 2',                    display_order: 10 },
+  { vaccine_name: 'PCV',             dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Pneumococcal disease',                              notes: null,                               display_order: 11 },
+  { vaccine_name: 'Rotavirus',       dose_number: 2, due_at_weeks: 10,   due_at_months: null, diseases_covered: 'Rotavirus diarrhoea',                               notes: null,                               display_order: 12 },
+  { vaccine_name: 'OPV',             dose_number: 3, due_at_weeks: 14,   due_at_months: null, diseases_covered: 'Polio',                                              notes: null,                               display_order: 13 },
+  { vaccine_name: 'DPT-HepB-Hib',   dose_number: 3, due_at_weeks: 14,   due_at_months: null, diseases_covered: 'Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib',  notes: 'Pentavalent 3',                    display_order: 14 },
+  { vaccine_name: 'PCV',             dose_number: 3, due_at_weeks: 14,   due_at_months: null, diseases_covered: 'Pneumococcal disease',                              notes: null,                               display_order: 15 },
+  { vaccine_name: 'Malaria (RTS,S)', dose_number: 1, due_at_weeks: null, due_at_months: 5,    diseases_covered: 'Malaria',                                            notes: 'R21 vaccine - 5 months',           display_order: 16 },
+  { vaccine_name: 'Malaria (RTS,S)', dose_number: 2, due_at_weeks: null, due_at_months: 6,    diseases_covered: 'Malaria',                                            notes: null,                               display_order: 17 },
+  { vaccine_name: 'Malaria (RTS,S)', dose_number: 3, due_at_weeks: null, due_at_months: 7,    diseases_covered: 'Malaria',                                            notes: null,                               display_order: 18 },
+  { vaccine_name: 'Measles-Rubella', dose_number: 1, due_at_weeks: null, due_at_months: 9,    diseases_covered: 'Measles, Rubella',                                   notes: null,                               display_order: 19 },
+  { vaccine_name: 'Yellow Fever',    dose_number: 1, due_at_weeks: null, due_at_months: 9,    diseases_covered: 'Yellow Fever',                                       notes: null,                               display_order: 20 },
+  { vaccine_name: 'Malaria (RTS,S)', dose_number: 4, due_at_weeks: null, due_at_months: 24,   diseases_covered: 'Malaria',                                            notes: 'Booster dose at 24 months',        display_order: 21 },
+  { vaccine_name: 'Measles-Rubella', dose_number: 2, due_at_weeks: null, due_at_months: 18,   diseases_covered: 'Measles, Rubella',                                   notes: 'Booster',                          display_order: 22 },
+  { vaccine_name: 'Vitamin A',       dose_number: 1, due_at_weeks: null, due_at_months: 6,    diseases_covered: 'Vitamin A deficiency',                               notes: 'Supplementation - every 6 months', display_order: 23 },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,7 +118,7 @@ function computeStatus(dueDate: Date | null, immunization: Immunization | null):
   if (!dueDate) return 'upcoming';
   const diffDays = Math.floor((dueDate.getTime() - Date.now()) / 86400000);
   if (diffDays < -14) return 'missed';
-  if (diffDays <= 14)  return 'due';
+  if (diffDays <= 14) return 'due';
   return 'upcoming';
 }
 
@@ -127,7 +129,7 @@ function findImmunization(
 ): Immunization | null {
   const candidates = immunizations.filter(i =>
     i.vaccine_name === schedule.vaccine_name &&
-    (i.dose_number === undefined || i.dose_number === null || i.dose_number === schedule.dose_number)
+    (i.dose_number === undefined || i.dose_number === null || i.dose_number === schedule.dose_number),
   );
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
@@ -156,71 +158,97 @@ async function getAuthUserId(): Promise<string | null> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Store
+// State interface
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface VaccineState {
-  schedules:     VaccineSchedule[];
-  immunizations: Immunization[];
-  vaccineRows:   VaccineRow[];
-  loading:       boolean;
-  seeded:        boolean;
+  schedules:       VaccineSchedule[];
+  immunizations:   Immunization[];
+  vaccineRows:     VaccineRow[];
+  loading:         boolean;
+  seeded:          boolean;
+  /** True once schedules have been fetched at least once this session. */
+  schedulesLoaded: boolean;
 
   seedScheduleIfEmpty: () => Promise<void>;
-  fetchSchedules:      () => Promise<void>;
-  fetchImmunizations:  (childId: string) => Promise<Immunization[]>;
-
   /**
-   * computeRows now accepts an optional child parameter.
-   * When provided, vaccine alert notifications are fired automatically.
+   * Fetches vaccine schedules from Supabase.
+   * Cached — returns immediately if already loaded this session.
+   * Pass force=true to bypass the cache (e.g. pull-to-refresh).
+   */
+  fetchSchedules:      (force?: boolean) => Promise<void>;
+  fetchImmunizations:  (childId: string) => Promise<Immunization[]>;
+  /**
+   * Recomputes vaccineRows from loaded schedules + immunizations.
+   * Does NOT fire notifications — call fireNotifications() explicitly
+   * after a mutation if alerts are needed.
    */
   computeRows: (
     childDob: string,
     freshImmunizations?: Immunization[],
     child?: import('@/types').Child,
   ) => void;
+  /**
+   * Fires vaccine alert + reminder notifications.
+   * Called internally by markAsGiven / markAsMissed / updateImmunization /
+   * unmarkImmunization — NOT on every computeRows call.
+   */
+  fireNotifications: (rows: VaccineRow[], child: import('@/types').Child) => void;
 
-  markAsGiven:        (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date, childDob?: string) => Promise<void>;
-  markAsMissed:       (scheduleId: string, childId: string, childDob?: string) => Promise<void>;
-    updateImmunization: (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
-  unmarkImmunization: (immunizationId: string, childId: string, childDob: string) => Promise<void>;
+  markAsGiven:         (scheduleId: string, childId: string, facilityName?: string, givenDate?: Date, childDob?: string) => Promise<void>;
+  markAsMissed:        (scheduleId: string, childId: string, childDob?: string) => Promise<void>;
+  updateImmunization:  (immunizationId: string, childId: string, facilityName: string, givenDate: Date, childDob: string) => Promise<void>;
+  unmarkImmunization:  (immunizationId: string, childId: string, childDob: string) => Promise<void>;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Store
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const useVaccineStore = create<VaccineState>((set, get) => ({
-  schedules:     [],
-  immunizations: [],
-  vaccineRows:   [],
-  loading:       false,
-  seeded:        false,
+  schedules:       [],
+  immunizations:   [],
+  vaccineRows:     [],
+  loading:         false,
+  seeded:          false,
+  schedulesLoaded: false,
 
   seedScheduleIfEmpty: async () => {
-    const { data: existing, error: checkErr } = await supabase.from('vaccine_schedules').select('id').limit(1);
+    const { data: existing } = await supabase.from('vaccine_schedules').select('id').limit(1);
     if (existing && existing.length > 0) { set({ seeded: true }); return; }
     const { error } = await supabase.from('vaccine_schedules').insert(KEPI_SEED);
     if (!error) set({ seeded: true });
     else console.error('[vaccineStore] seed:', error.message);
   },
 
-  fetchSchedules: async () => {
+  // ── Cached fetch — skips DB if schedules already loaded ──────────────────
+  fetchSchedules: async (force = false) => {
+    const { schedulesLoaded } = get();
+    if (schedulesLoaded && !force) return;
+
     set({ loading: true });
     const { data, error } = await supabase
       .from('vaccine_schedules')
       .select('*')
       .order('display_order', { ascending: true });
     if (error) console.error('[vaccineStore] fetchSchedules:', error.message);
-    if (data)  set({ schedules: data });
+    if (data)  set({ schedules: data, schedulesLoaded: true });
     set({ loading: false });
   },
 
-  fetchImmunizations: async (childId: string) => {
-    const { data, error } = await supabase.from('immunizations').select('*').eq('child_id', childId);
+  fetchImmunizations: async (childId) => {
+    const { data, error } = await supabase
+      .from('immunizations')
+      .select('*')
+      .eq('child_id', childId);
     if (error) console.error('[vaccineStore] fetchImmunizations:', error.message);
     const imms: Immunization[] = data ?? [];
     set({ immunizations: imms });
     return imms;
   },
 
-  computeRows: (childDob, freshImmunizations, child) => {
+  // ── Notifications removed — use fireNotifications() after mutations only ─
+  computeRows: (childDob, freshImmunizations) => {
     const { schedules } = get();
     const immunizations = freshImmunizations ?? get().immunizations;
 
@@ -235,16 +263,16 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     });
 
     set({ vaccineRows: rows });
+  },
 
-    // ── Fire vaccine notifications when child context is available ──────────
-    if (child) {
-      notifyVaccineAlerts(rows, child).catch(err =>
-        console.warn('[vaccineStore] notifyVaccineAlerts failed:', err),
-      );
-      scheduleVaccineDueReminders(rows, child).catch(err =>
-        console.warn('[vaccineStore] scheduleVaccineDueReminders failed:', err),
-      );
-    }
+  // ── Explicit notification trigger — call only after real mutations ────────
+  fireNotifications: (rows, child) => {
+    notifyVaccineAlerts(rows, child).catch(err =>
+      console.warn('[vaccineStore] notifyVaccineAlerts failed:', err),
+    );
+    scheduleVaccineDueReminders(rows, child).catch(err =>
+      console.warn('[vaccineStore] scheduleVaccineDueReminders failed:', err),
+    );
   },
 
   markAsGiven: async (scheduleId, childId, facilityName, givenDate, childDob) => {
@@ -252,13 +280,15 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     if (!userId) throw new Error('Not authenticated. Please log in and try again.');
     const schedule = get().schedules.find(s => s.id === scheduleId);
     if (!schedule) throw new Error('Vaccine schedule not found.');
+
     const { immunizations } = get();
-    const dueDate = getDueDate(schedule, (() => {
-      const row = get().vaccineRows.find(r => r.schedule.id === scheduleId);
-      return row?.dueDate ? row.dueDate.toISOString() : new Date().toISOString();
-    })());
+    const row = get().vaccineRows.find(r => r.schedule.id === scheduleId);
+    const dueDate = getDueDate(schedule, row?.dueDate?.toISOString() ?? new Date().toISOString());
     const scheduledDateStr = dueDate ? toDateStr(dueDate) : toDateStr(new Date());
-    const givenDateStr = toDateStr(givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date());
+    const givenDateStr = toDateStr(
+      givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date(),
+    );
+
     const existing = findImmunization(immunizations, schedule, dueDate);
     if (existing) {
       const { error } = await supabase
@@ -278,8 +308,16 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
       });
       assertNoError(error, 'markAsGiven/insert');
     }
-    const fresh2 = await get().fetchImmunizations(childId);
-    if (childDob) get().computeRows(childDob, fresh2);
+
+    const fresh = await get().fetchImmunizations(childId);
+    if (childDob) {
+      get().computeRows(childDob, fresh);
+      // Fire notifications only after this real mutation
+      const { vaccineRows } = get();
+      const { children } = await import('@/store/childStore').then(m => m.useChildStore.getState());
+      const child = children.find(c => c.id === childId);
+      if (child) get().fireNotifications(vaccineRows, child);
+    }
   },
 
   updateImmunization: async (immunizationId, childId, facilityName, givenDate, childDob) => {
@@ -294,8 +332,14 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     assertNoError(error, 'updateImmunization');
     if (!data || data.length === 0)
       throw new Error('Save failed — Supabase RLS may be blocking updates on immunizations.');
+
     const fresh = await get().fetchImmunizations(childId);
     get().computeRows(childDob, fresh);
+    // Fire notifications after mutation
+    const { vaccineRows } = get();
+    const { children } = await import('@/store/childStore').then(m => m.useChildStore.getState());
+    const child = children.find(c => c.id === childId);
+    if (child) get().fireNotifications(vaccineRows, child);
   },
 
   markAsMissed: async (scheduleId, childId, childDob) => {
@@ -303,10 +347,12 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     if (!userId) throw new Error('Not authenticated. Please log in and try again.');
     const schedule = get().schedules.find(s => s.id === scheduleId);
     if (!schedule) throw new Error('Vaccine schedule not found.');
+
     const { immunizations } = get();
     const row = get().vaccineRows.find(r => r.schedule.id === scheduleId);
     const dueDate = row?.dueDate ?? new Date();
     const existing = findImmunization(immunizations, schedule, dueDate);
+
     if (existing) {
       const { error } = await supabase
         .from('immunizations')
@@ -325,8 +371,15 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
       });
       assertNoError(error, 'markAsMissed/insert');
     }
-    const fresh2 = await get().fetchImmunizations(childId);
-    if (childDob) get().computeRows(childDob, fresh2);
+
+    const fresh = await get().fetchImmunizations(childId);
+    if (childDob) {
+      get().computeRows(childDob, fresh);
+      const { vaccineRows } = get();
+      const { children } = await import('@/store/childStore').then(m => m.useChildStore.getState());
+      const child = children.find(c => c.id === childId);
+      if (child) get().fireNotifications(vaccineRows, child);
+    }
   },
 
   unmarkImmunization: async (immunizationId, childId, childDob) => {
@@ -338,5 +391,6 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     assertNoError(error, 'unmarkImmunization');
     const fresh = await get().fetchImmunizations(childId);
     get().computeRows(childDob, fresh);
+    // No fireNotifications on unmark — restoring to scheduled state
   },
 }));

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/store/nutritionStore.ts
  *
  * Zustand store for the mamaTOTO nutrition module.
@@ -7,20 +7,20 @@
  * Manual 2010, and Kenya MIYCN Strategy 2023-2028.
  *
  * TABLES:
- *   nutrition_feeding_stages      — feeding stage cards by age band
- *   nutrition_food_groups         — WHO 8 MDD food groups
- *   nutrition_tips                — rotating IYCF tip cards
- *   nutrition_counselling_messages — per-age-band counselling messages
- *   nutrition_ebf_guidance        — EBF cards for 0-5 months
- *   nutrition_milestones          — feeding development + growth checkpoints
+ *   nutrition_feeding_stages      � feeding stage cards by age band
+ *   nutrition_food_groups         � WHO 8 MDD food groups
+ *   nutrition_tips                � rotating IYCF tip cards
+ *   nutrition_counselling_messages � per-age-band counselling messages
+ *   nutrition_ebf_guidance        � EBF cards for 0-5 months
+ *   nutrition_milestones          � feeding development + growth checkpoints
  */
 
 import { supabase } from '@/lib/supabase';
 import { create } from 'zustand';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES — mirror the Supabase table columns exactly
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// TYPES � mirror the Supabase table columns exactly
+// -----------------------------------------------------------------------------
 
 export interface NutritionFeedingStage {
   id: string;
@@ -98,9 +98,9 @@ export interface NutritionMilestone {
   guideline_version: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Map a child's age in months to the age_band string used in Supabase tables.
@@ -142,9 +142,9 @@ export function getEBFAgeBand(
   return '3-5';
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // STORE
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 interface NutritionState {
   // Data
@@ -163,7 +163,7 @@ interface NutritionState {
   // Actions
   fetchAll: () => Promise<void>;
 
-  // Selectors — derived data based on child age
+  // Selectors � derived data based on child age
   getFeedingStageForAge:        (ageMonths: number) => NutritionFeedingStage | null;
   getTipsForAge:                (ageMonths: number) => NutritionTip[];
   getCounsellingForAge:         (ageMonths: number) => CounsellingMessage[];
@@ -174,7 +174,7 @@ interface NutritionState {
 }
 
 export const useNutritionStore = create<NutritionState>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
+  // -- Initial state ----------------------------------------------------------
   feedingStages:        [],
   foodGroups:           [],
   tips:                 [],
@@ -185,75 +185,55 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   error:                null,
   hydrated:             false,
 
-  // ── fetchAll ───────────────────────────────────────────────────────────────
-  // Fetches all 6 nutrition tables in parallel. Safe to call multiple times —
+  // -- fetchAll ---------------------------------------------------------------
+  // Fetches all 6 nutrition tables in parallel. Safe to call multiple times �
   // skips if already hydrated. Call once on app load or on nutrition tab focus.
   fetchAll: async () => {
-    if (get().hydrated) return;
-    set({ loading: true, error: null });
+  if (get().hydrated) return;
+  set({ loading: true, error: null });
 
-    try {
-      const [
-        { data: stages,    error: e1 },
-        { data: groups,    error: e2 },
-        { data: tips,      error: e3 },
-        { data: messages,  error: e4 },
-        { data: ebf,       error: e5 },
-        { data: milestones,error: e6 },
-      ] = await Promise.all([
-        supabase
-          .from('nutrition_feeding_stages')
-          .select('*')
-          .order('age_min_months', { ascending: true }),
+  try {
+    const [
+      { data: stages,     error: e1 },
+      { data: groups,     error: e2 },
+      { data: tips,       error: e3 },
+      { data: messages,   error: e4 },
+      { data: ebf,        error: e5 },
+      { data: milestones, error: e6 },
+    ] = await Promise.all([
+      supabase.from('nutrition_feeding_stages').select('*').order('sort_order', { ascending: true }),
+      supabase.from('nutrition_food_groups').select('*').order('mdd_group_number', { ascending: true }),
+      supabase.from('nutrition_tips').select('*').order('age_min_months', { ascending: true }), // ? removed priority sort
+      supabase.from('nutrition_counselling_messages').select('*').order('priority', { ascending: true }),
+      supabase.from('nutrition_ebf_guidance').select('*').order('sort_order', { ascending: true }),
+      supabase.from('nutrition_milestones').select('*').order('trigger_age_months', { ascending: true }),
+    ]);
 
-        supabase
-          .from('nutrition_food_groups')
-          .select('*')
-          .order('mdd_group_number', { ascending: true }),
-
-        supabase
-          .from('nutrition_tips')
-          .select('*')
-          .order('priority', { ascending: true }),
-
-        supabase
-          .from('nutrition_counselling_messages')
-          .select('*')
-          .order('priority', { ascending: true }),
-
-        supabase
-          .from('nutrition_ebf_guidance')
-          .select('*')
-          .order('age_band', { ascending: true }),
-
-        supabase
-          .from('nutrition_milestones')
-          .select('*')
-          .order('trigger_age_months', { ascending: true }),
-      ]);
-
-      const firstError = e1 ?? e2 ?? e3 ?? e4 ?? e5 ?? e6;
-      if (firstError) throw new Error(firstError.message);
-
-      set({
-        feedingStages:       (stages       ?? []) as NutritionFeedingStage[],
-        foodGroups:          (groups       ?? []) as NutritionFoodGroup[],
-        tips:                (tips         ?? []) as NutritionTip[],
-        counsellingMessages: (messages     ?? []) as CounsellingMessage[],
-        ebfGuidance:         (ebf          ?? []) as EBFGuidance[],
-        milestones:          (milestones   ?? []) as NutritionMilestone[],
-        hydrated: true,
-        error:    null,
-      });
-    } catch (err: any) {
-      set({ error: err.message ?? 'Failed to load nutrition data' });
-      console.error('[nutritionStore] fetchAll failed:', err);
-    } finally {
-      set({ loading: false });
+    // Log individual errors without killing everything
+    const errors = [e1, e2, e3, e4, e5, e6].filter(Boolean);
+    if (errors.length) {
+      console.warn('[nutritionStore] Some tables had errors:', errors.map(e => e?.message));
     }
-  },
 
-  // ── Selectors ──────────────────────────────────────────────────────────────
+    set({
+      feedingStages:       (stages     ?? []) as NutritionFeedingStage[],
+      foodGroups:          (groups     ?? []) as NutritionFoodGroup[],
+      tips:                (tips       ?? []) as NutritionTip[],
+      counsellingMessages: (messages   ?? []) as CounsellingMessage[],
+      ebfGuidance:         (ebf        ?? []) as EBFGuidance[],
+      milestones:          (milestones ?? []) as NutritionMilestone[],
+      hydrated: true,
+      error: errors.length ? errors[0]?.message ?? null : null,
+    });
+  } catch (err: any) {
+    set({ error: err.message ?? 'Failed to load nutrition data' });
+    console.error('[nutritionStore] fetchAll failed:', err);
+  } finally {
+    set({ loading: false });
+  }
+},
+
+  // -- Selectors --------------------------------------------------------------
 
   /**
    * Returns the feeding stage card matching the child's age.

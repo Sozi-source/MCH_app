@@ -1,6 +1,7 @@
 ﻿/**
  * ZuriHealth — Premium Chat Screen
  * With rich message rendering (parsed sections, styled bullets, source badge)
+ * OPTIMIZED: Added proper spacing, input pushed down, better scroll behavior
  */
 import { COLORS, RADIUS } from '@/lib/theme';
 import { useChildStore } from '@/store/childStore';
@@ -25,9 +26,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Keyboard,
 } from 'react-native';
 
-const { width: W } = Dimensions.get('window');
+const { width: W, height: H } = Dimensions.get('window');
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
@@ -104,12 +106,10 @@ function parseAIMessage(raw: string): ParsedMessage {
   for (const line of lines) {
     if (/EMERGENCY|999|go to the nearest hospital/i.test(line)) emergency = true;
 
-    // Source line
     if (/^(Source:|📚|_Source)/i.test(line)) {
       source = line.replace(/^(Source:|📚|_Source:?)\s*/i, '').replace(/_/g, '').trim();
       continue;
     }
-    // Bullet lines — starts with -, *, •, or numbered like "1."
     if (/^[-*•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
       bullets.push(line.replace(/^[-*•\d.]\s+/, '').trim());
       continue;
@@ -134,7 +134,6 @@ function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }
 
   return (
     <View style={rb.card}>
-      {/* Emergency banner */}
       {parsed.emergency && (
         <View style={rb.emergencyBanner}>
           <Ionicons name="warning" size={14} color="#fff" />
@@ -142,12 +141,10 @@ function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }
         </View>
       )}
 
-      {/* Main answer */}
       {parsed.answer.length > 0 && (
         <Text style={rb.answerText}>{parsed.answer}</Text>
       )}
 
-      {/* Action bullets */}
       {parsed.bullets.length > 0 && (
         <View style={rb.bulletsSection}>
           <Text style={rb.bulletsSectionLabel}>What to do</Text>
@@ -162,7 +159,6 @@ function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }
         </View>
       )}
 
-      {/* Source badge */}
       {parsed.source && (
         <View style={rb.sourceBadge}>
           <Ionicons name="book-outline" size={11} color={COLORS.primary} />
@@ -453,32 +449,19 @@ export default function ChatScreen() {
     };
   };
 
-  const getSuggestions = (): string[] => {
-    const ageMonths = getAgeMonths();
-    const base: string[] = [];
-    if (vaccineRows.some(r => r.status === 'missed')) base.push('My baby missed a vaccine — what do I do?');
-    if (vaccineRows.some(r => r.status === 'due'))    base.push('Which vaccines are due now?');
-    const latestWaz = growthRecords[0]?.waz ?? null;
-    if (latestWaz != null && latestWaz < -2) base.push("My baby's weight is low — what should I do?");
-    else if (growthRecords.length > 0) base.push('Is my baby growing well?');
-    else base.push("How do I track my baby's growth?");
-    if (ageMonths >= 6 && ageMonths <= 9) base.push('How do I start solid foods?');
-    if (ageMonths < 6) base.push('How often should I breastfeed?');
-    base.push('What should I feed my baby?', 'My baby has a fever', 'Signs of dehydration', 'Breastfeeding tips');
-    return base.slice(0, 7);
-  };
-
   const [messages, setMessages] = useState<Message[]>([{
     id: '0', role: 'assistant',
     content: activeChild
-      ? `Habari! I'm Zuri, your ZuriHealth assistant \uD83D\uDC99\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more — all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
-      : `Habari! I'm Zuri, your ZuriHealth assistant \uD83D\uDC99\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
+      ? `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more — all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
+      : `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
     timestamp: new Date(),
   }]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
   const [newMsgIds, setNewMsgIds] = useState<Set<string>>(new Set(['0']));
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+  
   const scrollToBottom = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
   const sendMessage = async (text?: string) => {
@@ -489,7 +472,11 @@ export default function ChatScreen() {
     const updated = [...messages, userMsg];
     setMessages(updated);
     setNewMsgIds(prev => new Set([...prev, id]));
-    setInput(''); setLoading(true); scrollToBottom();
+    setInput(''); 
+    setLoading(true); 
+    scrollToBottom();
+    Keyboard.dismiss();
+    
     try {
       const apiMessages = updated.filter(m => m.id !== '0').map(m => ({ role: m.role, content: m.content }));
       const ctx = buildChildContext();
@@ -519,10 +506,13 @@ export default function ChatScreen() {
   const hasVaccines = vaccineRows.length > 0;
   const hasMissed   = vaccineRows.some(r => r.status === 'missed');
   const hasDue      = vaccineRows.some(r => r.status === 'due');
-  const suggestions = getSuggestions();
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView 
+      style={s.root} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <View style={s.header}>
         <View style={s.headerOrb1} />
         <View style={s.headerOrb2} />
@@ -560,141 +550,412 @@ export default function ChatScreen() {
         )}
       </View>
 
-      <ScrollView ref={scrollRef} style={s.messageList} contentContainerStyle={s.messageContent} showsVerticalScrollIndicator={false} onContentSizeChange={scrollToBottom}>
+      <ScrollView 
+        ref={scrollRef} 
+        style={s.messageList} 
+        contentContainerStyle={s.messageContent} 
+        showsVerticalScrollIndicator={false} 
+        onContentSizeChange={scrollToBottom}
+      >
         {messages.map(msg => <MessageBubble key={msg.id} msg={msg} isNew={newMsgIds.has(msg.id)} />)}
         {loading && <TypingDots />}
-        <View style={{ height: 20 }} />
+        {/* Extra space at bottom for better readability */}
+        <View style={{ height: 40 }} />
       </ScrollView>
 
-      <View style={s.suggestBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.suggestRow}>
-          {suggestions.map(text => (
-            <TouchableOpacity key={text} style={ch.chip} onPress={() => sendMessage(text)} activeOpacity={0.75}>
-              <Text style={ch.text}>{text}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={s.inputBar}>
-        <TextInput
-          style={s.input} value={input} onChangeText={setInput}
-          placeholder="Ask Zuri a health question..." placeholderTextColor={COLORS.textMuted}
-          multiline maxLength={500}
-        />
-        <TouchableOpacity
-          style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnOff]}
-          onPress={() => sendMessage()} disabled={!input.trim() || loading} activeOpacity={0.85}
-        >
-          {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={17} color="#fff" />}
-        </TouchableOpacity>
+      {/* Input Bar - Fixed at bottom with proper spacing */}
+      <View style={s.inputWrapper}>
+        <View style={s.inputBar}>
+          <TextInput
+            ref={inputRef}
+            style={s.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Ask Zuri a health question..."
+            placeholderTextColor={COLORS.textMuted}
+            multiline
+            maxLength={500}
+            returnKeyType="send"
+            onSubmitEditing={() => sendMessage()}
+          />
+          <TouchableOpacity
+            style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnOff]}
+            onPress={() => sendMessage()} 
+            disabled={!input.trim() || loading} 
+            activeOpacity={0.85}
+          >
+            {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={17} color="#fff" />}
+          </TouchableOpacity>
+        </View>
+        {/* Extra safe area padding for bottom */}
+        <View style={s.bottomSafeArea} />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles
+// Styles - Optimized with proper spacing
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.background, paddingBottom: 104 },
-  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 44, paddingBottom: 12, paddingHorizontal: 16, overflow: 'hidden' },
-  headerOrb1: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40 },
-  headerOrb2: { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 40 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  avatarWrap:  { position: 'relative' },
-  avatarOuter: { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
-  avatarInner: { width: 32, height: 32, borderRadius: 11, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.given, borderWidth: 2, borderColor: COLORS.primary },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.white, letterSpacing: -0.5 },
-  headerSub:   { fontSize: 11, color: COLORS.primaryMid, marginTop: 1, fontWeight: '500' },
-  alertBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.missed, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
-  alertBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
-  contextStrip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  childPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
-  childPillText: { fontSize: 11, color: COLORS.white, fontWeight: '600' },
-  dataPills: { flexDirection: 'row', gap: 6 },
-  messageList: { flex: 1 },
-  messageContent: { paddingHorizontal: 16, paddingTop: 20 },
-  suggestBar: { backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border, paddingVertical: 10 },
-  suggestRow: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border },
-  input: { flex: 1, backgroundColor: COLORS.background, borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: COLORS.textPrimary, borderWidth: 1.5, borderColor: COLORS.border, maxHeight: 100, marginBottom: 24 },
-  sendBtn: { width: 46, height: 46, borderRadius: 15, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 24, elevation: 6 },
-  sendBtnOff: { backgroundColor: COLORS.primaryMid },
+  root: { 
+    flex: 1, 
+    backgroundColor: COLORS.background,
+  },
+  header: { 
+    backgroundColor: COLORS.primary, 
+    paddingTop: Platform.OS === 'ios' ? 56 : 44, 
+    paddingBottom: 12, 
+    paddingHorizontal: 16, 
+    overflow: 'hidden' 
+  },
+  headerOrb1: { 
+    position: 'absolute', 
+    width: 180, 
+    height: 180, 
+    borderRadius: 90, 
+    backgroundColor: 'rgba(255,255,255,0.07)', 
+    top: -60, 
+    right: -40 
+  },
+  headerOrb2: { 
+    position: 'absolute', 
+    width: 100, 
+    height: 100, 
+    borderRadius: 50, 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    bottom: -40, 
+    left: 40 
+  },
+  headerRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12, 
+    marginBottom: 12 
+  },
+  avatarWrap:  { 
+    position: 'relative' 
+  },
+  avatarOuter: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 16, 
+    backgroundColor: 'rgba(255,255,255,0.15)', 
+    borderWidth: 1.5, 
+    borderColor: 'rgba(255,255,255,0.25)', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  avatarInner: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 11, 
+    overflow: 'hidden', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  onlineDot: { 
+    position: 'absolute', 
+    bottom: 1, 
+    right: 1, 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    backgroundColor: COLORS.given, 
+    borderWidth: 2, 
+    borderColor: COLORS.primary 
+  },
+  headerTitle: { 
+    fontSize: 18, 
+    fontWeight: '800', 
+    color: COLORS.white, 
+    letterSpacing: -0.5 
+  },
+  headerSub: {   
+    fontSize: 11, 
+    color: COLORS.primaryMid, 
+    marginTop: 1, 
+    fontWeight: '500' 
+  },
+  alertBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    backgroundColor: COLORS.missed, 
+    paddingHorizontal: 10, 
+    paddingVertical: 5, 
+    borderRadius: RADIUS.full 
+  },
+  alertBadgeText: { 
+    fontSize: 10, 
+    fontWeight: '700', 
+    color: '#fff' 
+  },
+  contextStrip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    gap: 8 
+  },
+  childPill: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 5, 
+    backgroundColor: 'rgba(255,255,255,0.15)', 
+    paddingHorizontal: 10, 
+    paddingVertical: 5, 
+    borderRadius: RADIUS.full 
+  },
+  childPillText: { 
+    fontSize: 11, 
+    color: COLORS.white, 
+    fontWeight: '600' 
+  },
+  dataPills: { 
+    flexDirection: 'row', 
+    gap: 6 
+  },
+  messageList: { 
+    flex: 1 
+  },
+  messageContent: { 
+    paddingHorizontal: 16, 
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  
+  // Input section - Pushed down with proper spacing
+  inputWrapper: {
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 12,
+  },
+  inputBar: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-end', 
+    gap: 10, 
+    paddingHorizontal: 16,
+  },
+  input: { 
+    flex: 1, 
+    backgroundColor: COLORS.background, 
+    borderRadius: RADIUS.lg, 
+    paddingHorizontal: 14, 
+    paddingVertical: 12, 
+    fontSize: 14, 
+    color: COLORS.textPrimary, 
+    borderWidth: 1.5, 
+    borderColor: COLORS.border, 
+    maxHeight: 100,
+    minHeight: 44,
+  },
+  sendBtn: { 
+    width: 46, 
+    height: 46, 
+    borderRadius: 15, 
+    backgroundColor: COLORS.primary, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    elevation: 6,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  sendBtnOff: { 
+    backgroundColor: COLORS.primaryMid,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  bottomSafeArea: {
+    height: Platform.OS === 'ios' ? 34 : 24,
+  },
 });
 
-// Rich bubble styles
+// Rich bubble styles - Increased spacing
 const rb = StyleSheet.create({
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 18,
     borderBottomLeftRadius: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    maxWidth: W * 0.78,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    maxWidth: W * 0.8,
     borderWidth: 1,
     borderColor: COLORS.border,
     elevation: 2,
-    gap: 10,
+    gap: 12,
+    marginBottom: 4,
   },
   emergencyBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8,
     backgroundColor: '#DC2626',
-    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+    borderRadius: 10, 
+    paddingHorizontal: 12, 
+    paddingVertical: 8,
   },
-  emergencyText: { fontSize: 12, fontWeight: '700', color: '#fff', flex: 1 },
-  answerText: { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary, fontWeight: '500' },
+  emergencyText: { 
+    fontSize: 12, 
+    fontWeight: '700', 
+    color: '#fff', 
+    flex: 1 
+  },
+  answerText: { 
+    fontSize: 14, 
+    lineHeight: 22, 
+    color: COLORS.textPrimary, 
+    fontWeight: '500' 
+  },
   bulletsSection: {
     backgroundColor: COLORS.primaryLight,
-    borderRadius: 10,
-    padding: 10,
-    gap: 7,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
   },
   bulletsSectionLabel: {
-    fontSize: 10, fontWeight: '800', color: COLORS.primary,
-    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2,
+    fontSize: 11, 
+    fontWeight: '800', 
+    color: COLORS.primary,
+    textTransform: 'uppercase', 
+    letterSpacing: 0.6, 
+    marginBottom: 4,
   },
-  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  bulletRow: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 10 
+  },
   bulletDot: {
-    width: 20, height: 20, borderRadius: 10,
+    width: 22, 
+    height: 22, 
+    borderRadius: 11,
     backgroundColor: COLORS.primary,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0, marginTop: 1,
+    alignItems: 'center', 
+    justifyContent: 'center',
+    flexShrink: 0, 
+    marginTop: 1,
   },
-  bulletDotText: { fontSize: 10, fontWeight: '800', color: '#fff' },
-  bulletText: { fontSize: 13, lineHeight: 20, color: COLORS.textPrimary, flex: 1 },
+  bulletDotText: { 
+    fontSize: 10, 
+    fontWeight: '800', 
+    color: '#fff' 
+  },
+  bulletText: { 
+    fontSize: 13, 
+    lineHeight: 20, 
+    color: COLORS.textPrimary, 
+    flex: 1 
+  },
   sourceBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6,
     backgroundColor: '#F0F9FF',
-    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: '#BAE6FD',
+    borderRadius: 10, 
+    paddingHorizontal: 12, 
+    paddingVertical: 8,
+    borderWidth: 1, 
+    borderColor: '#BAE6FD',
   },
-  sourceText: { fontSize: 11, color: COLORS.primary, fontWeight: '600', flex: 1 },
-  timeText: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 2 },
+  sourceText: { 
+    fontSize: 11, 
+    color: COLORS.primary, 
+    fontWeight: '600', 
+    flex: 1 
+  },
+  timeText: { 
+    fontSize: 10, 
+    color: COLORS.textMuted, 
+    textAlign: 'right', 
+    marginTop: 4 
+  },
 });
 
 const b = StyleSheet.create({
-  userRow: { alignItems: 'flex-end', marginBottom: 14 },
-  userBubble: { backgroundColor: COLORS.primary, borderRadius: 18, borderBottomRightRadius: 5, paddingHorizontal: 14, paddingVertical: 10, maxWidth: W * 0.78, elevation: 4 },
-  userText: { fontSize: 14, lineHeight: 21, color: COLORS.white },
-  userTime: { fontSize: 10, color: COLORS.primaryMid, marginTop: 4, textAlign: 'right' },
-  aiRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 14 },
-  avatar: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden', elevation: 3 },
-  aiBubble: { backgroundColor: COLORS.white, borderRadius: 18, borderBottomLeftRadius: 5, paddingHorizontal: 14, paddingVertical: 10, maxWidth: W * 0.75, borderWidth: 1, borderColor: COLORS.border, elevation: 2 },
-  aiText: { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary },
-  aiTime: { fontSize: 10, color: COLORS.textMuted, marginTop: 4 },
-});
-
-const ch = StyleSheet.create({
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.primaryLight, borderWidth: 1, borderColor: COLORS.border },
-  text: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
+  userRow: { 
+    alignItems: 'flex-end', 
+    marginBottom: 16 
+  },
+  userBubble: { 
+    backgroundColor: COLORS.primary, 
+    borderRadius: 18, 
+    borderBottomRightRadius: 5, 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    maxWidth: W * 0.8, 
+    elevation: 4 
+  },
+  userText: { 
+    fontSize: 14, 
+    lineHeight: 21, 
+    color: COLORS.white 
+  },
+  userTime: { 
+    fontSize: 10, 
+    color: COLORS.primaryMid, 
+    marginTop: 6, 
+    textAlign: 'right' 
+  },
+  aiRow: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-end', 
+    gap: 10, 
+    marginBottom: 16 
+  },
+  avatar: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    overflow: 'hidden', 
+    elevation: 3 
+  },
+  aiBubble: { 
+    backgroundColor: COLORS.white, 
+    borderRadius: 18, 
+    borderBottomLeftRadius: 5, 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    maxWidth: W * 0.75, 
+    borderWidth: 1, 
+    borderColor: COLORS.border, 
+    elevation: 2 
+  },
+  aiText: { 
+    fontSize: 14, 
+    lineHeight: 22, 
+    color: COLORS.textPrimary 
+  },
+  aiTime: { 
+    fontSize: 10, 
+    color: COLORS.textMuted, 
+    marginTop: 6 
+  },
 });
 
 const pill = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, borderWidth: 1 },
-  ok:   { backgroundColor: COLORS.givenLight, borderColor: COLORS.given },
-  warn: { backgroundColor: COLORS.dueLight,   borderColor: COLORS.due  },
-  text: { fontSize: 10, fontWeight: '600' },
+  wrap: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: RADIUS.full, 
+    borderWidth: 1 
+  },
+  ok:   { 
+    backgroundColor: COLORS.givenLight, 
+    borderColor: COLORS.given 
+  },
+  warn: { 
+    backgroundColor: COLORS.dueLight,   
+    borderColor: COLORS.due  
+  },
+  text: { 
+    fontSize: 10, 
+    fontWeight: '600' 
+  },
 });

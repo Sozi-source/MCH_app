@@ -1,13 +1,17 @@
-﻿function toTitleCase(str: string): string { return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase()); }
+﻿function toTitleCase(str: string): string { 
+  return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase()); 
+}
 
 // src/app/(tabs)/children.tsx
+// ZuriHealth — Children Management Screen (Fully Optimized)
+
 import { useT } from '@/hooks/useT';
-import { COLORS, RADIUS } from '@/lib/theme';
+import { COLORS, RADIUS, FONTS } from '@/lib/theme';
 import { useAuthStore } from '@/store/authStore';
 import { useChildStore } from '@/store/childStore';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,7 +21,11 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Animated,
+  Dimensions,
 } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Child = {
@@ -25,7 +33,6 @@ type Child = {
   full_name: string;
   date_of_birth: string;
   sex: 'male' | 'female';
-  // Optional enriched fields from store / joined query
   next_vaccine?: string | null;
   next_visit_date?: string | null;
   growth_status?: 'normal' | 'monitor' | 'alert' | null;
@@ -33,13 +40,24 @@ type Child = {
   vaccines_total?: number;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+const GROWTH_STATUS_CONFIG = {
+  normal:  { label: 'On Track',   bg: '#E8F5E9', color: '#2E7D32', icon: 'checkmark-circle' as const },
+  monitor: { label: 'Monitor',    bg: '#FFF8E1', color: '#BA7517', icon: 'alert-circle' as const },
+  alert:   { label: 'See Doctor', bg: '#FFEBEE', color: '#C62828', icon: 'warning' as const },
+} as const;
+
+const GENDER_STYLES = {
+  female: { iconBg: '#FCE4EC', iconColor: '#C2185B', avatarBg: '#F48FB1' },
+  male:   { iconBg: '#E3F2FD', iconColor: '#1565C0', avatarBg: '#64B5F6' },
+} as const;
+
+// ─── Helpers (Memoized for performance) ──────────────────────────────────────
 function getAgeLabel(dob: string): string {
   const birth = new Date(dob);
   const now = new Date();
-  const totalMonths =
-    (now.getFullYear() - birth.getFullYear()) * 12 +
-    (now.getMonth() - birth.getMonth());
+  const totalMonths = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+  
   if (totalMonths < 1) return 'Newborn';
   if (totalMonths < 24) return `${totalMonths} mo`;
   const years = Math.floor(totalMonths / 12);
@@ -47,27 +65,11 @@ function getAgeLabel(dob: string): string {
   return rem > 0 ? `${years}y ${rem}m` : `${years} yr${years !== 1 ? 's' : ''}`;
 }
 
-function getGrowthBadge(status?: Child['growth_status']) {
-  if (!status) return null;
-  const map = {
-    normal:  { label: 'On Track',   bg: '#E8F5E9', color: '#2E7D32', icon: 'checkmark-circle' as const },
-    monitor: { label: 'Monitor',    bg: '#FFF8E1', color: '#BA7517', icon: 'alert-circle'     as const },
-    alert:   { label: 'See Doctor', bg: '#FFEBEE', color: '#C62828', icon: 'warning'           as const },
-  };
-  return map[status];
-}
-
-function getGenderStyle(sex: 'male' | 'female') {
-  return sex === 'female'
-    ? { iconBg: '#FCE4EC', iconColor: '#C2185B', avatarBg: '#F48FB1' }
-    : { iconBg: '#E3F2FD', iconColor: '#1565C0', avatarBg: '#64B5F6' };
-}
-
 function getInitials(name: string): string {
   return name
     .split(' ')
     .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
+    .map(w => w[0]?.toUpperCase() ?? '')
     .join('');
 }
 
@@ -77,131 +79,146 @@ function formatDOB(dob: string): string {
   });
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+function formatNextVisit(date: string): string {
+  return new Date(date).toLocaleDateString('en-KE', {
+    day: 'numeric', month: 'short',
+  });
+}
 
-function ChildAvatar({ child }: { child: Child }) {
-  const gs = getGenderStyle(child.sex);
+// ─── Sub-components (Memoized for performance) ───────────────────────────────
+
+const ChildAvatar = React.memo(({ child }: { child: Child }) => {
+  const gs = GENDER_STYLES[child.sex];
   return (
     <View style={[styles.avatar, { backgroundColor: gs.avatarBg }]}>
       <Text style={styles.avatarInitials}>{getInitials(child.full_name)}</Text>
       <View style={[styles.avatarDot, { backgroundColor: gs.iconColor }]} />
     </View>
   );
-}
+});
 
-function VaccineProgress({ given = 0, total = 0 }: { given?: number; total?: number }) {
+ChildAvatar.displayName = 'ChildAvatar';
+
+const VaccineProgress = React.memo(({ given = 0, total = 0 }: { given?: number; total?: number }) => {
   if (total === 0) return null;
-  const pct = Math.min(given / total, 1);
+  const percentage = Math.min((given / total) * 100, 100);
+  
   return (
     <View style={styles.vaccineRow}>
       <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.given} />
       <View style={styles.vaccineBarBg}>
-        <View style={[styles.vaccineBarFill, { width: `${Math.round(pct * 100)}%` as any }]} />
+        <View style={[styles.vaccineBarFill, { width: `${percentage}%` }]} />
       </View>
       <Text style={styles.vaccineLabel}>{given}/{total}</Text>
     </View>
   );
-}
+});
 
-function GrowthBadge({ status }: { status?: Child['growth_status'] }) {
-  const badge = getGrowthBadge(status);
-  if (!badge) return null;
+VaccineProgress.displayName = 'VaccineProgress';
+
+const GrowthBadge = React.memo(({ status }: { status?: Child['growth_status'] }) => {
+  if (!status) return null;
+  const config = GROWTH_STATUS_CONFIG[status];
+  if (!config) return null;
+  
   return (
-    <View style={[styles.growthBadge, { backgroundColor: badge.bg }]}>
-      <Ionicons name={badge.icon} size={11} color={badge.color} />
-      <Text style={[styles.growthBadgeText, { color: badge.color }]}>{badge.label}</Text>
+    <View style={[styles.growthBadge, { backgroundColor: config.bg }]}>
+      <Ionicons name={config.icon} size={11} color={config.color} />
+      <Text style={[styles.growthBadgeText, { color: config.color }]}>{config.label}</Text>
     </View>
   );
-}
+});
 
-function ActivePill() {
-  return (
-    <View style={styles.activePill}>
-      <Ionicons name="radio-button-on" size={10} color={COLORS.onPrimary} />
-      <Text style={styles.activePillText}>Active</Text>
-    </View>
-  );
-}
+GrowthBadge.displayName = 'GrowthBadge';
 
-function ChildCard({
-  item,
-  isSelected,
-  onPress,
-}: {
+const ActivePill = React.memo(() => (
+  <View style={styles.activePill}>
+    <Ionicons name="radio-button-on" size={10} color={COLORS.onPrimary} />
+    <Text style={styles.activePillText}>Active</Text>
+  </View>
+));
+
+ActivePill.displayName = 'ActivePill';
+
+// Animated Child Card for smoother interactions
+const AnimatedChildCard = ({ item, isSelected, onPress }: {
   item: Child;
   isSelected: boolean;
   onPress: () => void;
-}) {
-  const gs = getGenderStyle(item.sex);
-
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const gs = GENDER_STYLES[item.sex];
+  
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.98, duration: 80, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+    onPress();
+  };
+  
   return (
-    <TouchableOpacity
-      style={[styles.card, isSelected && styles.cardActive]}
-      onPress={onPress}
-      activeOpacity={0.82}
-    >
-      {/* Active left accent bar */}
-      {isSelected && <View style={styles.activeAccentBar} />}
-
-      {/* Avatar */}
-      <ChildAvatar child={item} />
-
-      {/* Body */}
-      <View style={styles.cardBody}>
-        {/* Name + active pill */}
-        <View style={styles.cardNameRow}>
-          <Text style={styles.cardName} numberOfLines={1}>{toTitleCase(item.full_name)}</Text>
-          {isSelected && <ActivePill />}
-        </View>
-
-        {/* Age chip + DOB */}
-        <View style={styles.cardMetaRow}>
-          <View style={[styles.agePill, { backgroundColor: gs.iconBg }]}>
-            <Ionicons name="calendar-outline" size={11} color={gs.iconColor} />
-            <Text style={[styles.agePillText, { color: gs.iconColor }]}>
-              {getAgeLabel(item.date_of_birth)}
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[styles.card, isSelected && styles.cardActive]}
+        onPress={handlePress}
+        activeOpacity={0.85}
+      >
+        {isSelected && <View style={styles.activeAccentBar} />}
+        
+        <ChildAvatar child={item} />
+        
+        <View style={styles.cardBody}>
+          <View style={styles.cardNameRow}>
+            <Text style={styles.cardName} numberOfLines={1}>
+              {toTitleCase(item.full_name)}
             </Text>
+            {isSelected && <ActivePill />}
           </View>
-          <Text style={styles.dobText}>{formatDOB(item.date_of_birth)}</Text>
-        </View>
-
-        {/* Vaccine bar */}
-        <VaccineProgress given={item.vaccines_given} total={item.vaccines_total} />
-
-        {/* Next visit */}
-        {item.next_visit_date && (
-          <View style={styles.nextVisitRow}>
-            <Ionicons name="time-outline" size={11} color={COLORS.due} />
-            <Text style={styles.nextVisitText}>
-              Next visit:{' '}
-              {new Date(item.next_visit_date).toLocaleDateString('en-KE', {
-                day: 'numeric', month: 'short',
-              })}
-            </Text>
+          
+          <View style={styles.cardMetaRow}>
+            <View style={[styles.agePill, { backgroundColor: gs.iconBg }]}>
+              <Ionicons name="calendar-outline" size={11} color={gs.iconColor} />
+              <Text style={[styles.agePillText, { color: gs.iconColor }]}>
+                {getAgeLabel(item.date_of_birth)}
+              </Text>
+            </View>
+            <Text style={styles.dobText}>{formatDOB(item.date_of_birth)}</Text>
           </View>
-        )}
-      </View>
-
-      {/* Right col: growth badge + chevron */}
-      <View style={styles.cardRight}>
-        <GrowthBadge status={item.growth_status} />
-        <View style={[styles.chevronCircle, isSelected && styles.chevronCircleActive]}>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={isSelected ? COLORS.onPrimary : COLORS.textMuted}
-          />
+          
+          <VaccineProgress given={item.vaccines_given} total={item.vaccines_total} />
+          
+          {item.next_visit_date && (
+            <View style={styles.nextVisitRow}>
+              <Ionicons name="time-outline" size={11} color={COLORS.due} />
+              <Text style={styles.nextVisitText}>
+                Next visit: {formatNextVisit(item.next_visit_date)}
+              </Text>
+            </View>
+          )}
         </View>
-      </View>
-    </TouchableOpacity>
+        
+        <View style={styles.cardRight}>
+          <GrowthBadge status={item.growth_status} />
+          <View style={[styles.chevronCircle, isSelected && styles.chevronCircleActive]}>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={isSelected ? COLORS.onPrimary : COLORS.textMuted}
+            />
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
-}
+};
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+// Empty State Component
+const EmptyState = React.memo(({ onAdd }: { onAdd: () => void }) => {
   const t = useT();
+  
   return (
     <View style={styles.emptyContainer}>
-      {/* Triple-ring decorative icon */}
       <View style={styles.emptyRingOuter}>
         <View style={styles.emptyRingInner}>
           <View style={styles.emptyIconCircle}>
@@ -209,54 +226,149 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
           </View>
         </View>
       </View>
-
+      
       <Text style={styles.emptyTitle}>{t('no_children')}</Text>
       <Text style={styles.emptySubtitle}>{t('no_children_hint')}</Text>
-
-      {/* Feature preview cards */}
+      
       <View style={styles.emptyHints}>
         {[
-          { icon: 'shield-checkmark-outline', text: 'Track vaccinations',  color: COLORS.given    },
-          { icon: 'trending-up-outline',      text: 'Monitor growth',      color: COLORS.primary  },
-          { icon: 'star-outline',             text: 'Record milestones',   color: COLORS.upcoming },
-        ].map((h) => (
-          <View key={h.text} style={styles.emptyHintRow}>
-            <View style={[styles.emptyHintIcon, { backgroundColor: `${h.color}18` }]}>
-              <Ionicons name={h.icon as any} size={16} color={h.color} />
+          { icon: 'shield-checkmark-outline', text: 'Track vaccinations', color: COLORS.given },
+          { icon: 'trending-up-outline', text: 'Monitor growth', color: COLORS.primary },
+          { icon: 'star-outline', text: 'Record milestones', color: COLORS.upcoming },
+        ].map((hint) => (
+          <View key={hint.text} style={styles.emptyHintRow}>
+            <View style={[styles.emptyHintIcon, { backgroundColor: `${hint.color}18` }]}>
+              <Ionicons name={hint.icon as any} size={16} color={hint.color} />
             </View>
-            <Text style={styles.emptyHintText}>{h.text}</Text>
+            <Text style={styles.emptyHintText}>{hint.text}</Text>
           </View>
         ))}
       </View>
-
+      
       <TouchableOpacity style={styles.emptyBtn} onPress={onAdd} activeOpacity={0.85}>
         <Ionicons name="add-circle-outline" size={20} color={COLORS.onPrimary} />
         <Text style={styles.emptyBtnText}>{t('add_child_btn')}</Text>
       </TouchableOpacity>
     </View>
   );
-}
+});
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+EmptyState.displayName = 'EmptyState';
+
+// Tip Card Component
+const TipCard = React.memo(() => (
+  <View style={styles.tipCard}>
+    <View style={styles.tipAccent} />
+    <View style={styles.tipContent}>
+      <Text style={styles.tipTitle}>💡 Did you know?</Text>
+      <Text style={styles.tipBody}>
+        Regular growth monitoring helps detect malnutrition early. WHO recommends monthly check-ups for children under 2 years.
+      </Text>
+    </View>
+  </View>
+));
+
+TipCard.displayName = 'TipCard';
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ChildrenScreen() {
   const t = useT();
   const router = useRouter();
   const { user, hydrated } = useAuthStore();
   const { children, fetchChildren, selectChild, selectedChildId } = useChildStore();
   const [refreshing, setRefreshing] = useState(false);
-
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Load children on mount and when screen comes into focus
+  const loadChildren = useCallback(async () => {
+    if (!user) return;
+    try {
+      await fetchChildren(user.id);
+    } catch (error) {
+      console.error('Error loading children:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, fetchChildren]);
+  
   useEffect(() => {
-    if (hydrated && user) fetchChildren(user.id);
-  }, [hydrated, user]);
-
-  const handleRefresh = async () => {
+    if (hydrated && user) {
+      loadChildren();
+    } else if (hydrated && !user) {
+      setIsLoading(false);
+    }
+  }, [hydrated, user, loadChildren]);
+  
+  // Refresh when screen comes into focus (for updates from add/edit)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        loadChildren();
+      }
+    }, [user, loadChildren])
+  );
+  
+  const handleRefresh = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
     await fetchChildren(user.id);
     setRefreshing(false);
-  };
-
-  if (!hydrated) {
+  }, [user, fetchChildren]);
+  
+  const handleAddChild = useCallback(() => {
+    router.push('/children/add');
+  }, [router]);
+  
+  const handleChildPress = useCallback((childId: string) => {
+    selectChild(childId);
+    router.push(`/children/${childId}`);
+  }, [selectChild, router]);
+  
+  // Memoized statistics
+  const stats = useMemo(() => {
+    const childArray = children as Child[];
+    const onTrack = childArray.filter(c => c.growth_status === 'normal').length;
+    const upcoming = childArray.filter(c => c.next_visit_date).length;
+    return { onTrack, upcoming, total: childArray.length };
+  }, [children]);
+  
+  // Render header component
+  const renderHeader = useCallback(() => {
+    if (children.length === 0) return null;
+    return (
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          {stats.total === 1 ? '1 Child' : `${stats.total} Children`}
+        </Text>
+        <TouchableOpacity onPress={handleAddChild}>
+          <Text style={styles.sectionAction}>+ Add child</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [children.length, stats.total, handleAddChild]);
+  
+  // Render footer component
+  const renderFooter = useCallback(() => (
+    <>
+      <TipCard />
+      <View style={{ height: 140 }} />
+    </>
+  ), []);
+  
+  // Key extractor
+  const keyExtractor = useCallback((item: Child) => item.id, []);
+  
+  // Render item
+  const renderItem = useCallback(({ item }: { item: Child }) => (
+    <AnimatedChildCard
+      item={item}
+      isSelected={item.id === selectedChildId}
+      onPress={() => handleChildPress(item.id)}
+    />
+  ), [selectedChildId, handleChildPress]);
+  
+  // Loading state
+  if (!hydrated || isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator color={COLORS.primary} size="large" />
@@ -264,19 +376,14 @@ export default function ChildrenScreen() {
       </View>
     );
   }
-
-  // Stats for hero bar
-  const onTrack  = (children as Child[]).filter((c) => c.growth_status === 'normal').length;
-  const upcoming = (children as Child[]).filter((c) => c.next_visit_date).length;
-
+  
   return (
     <View style={styles.container}>
-
-      {/* ── Hero Header ── */}
+      {/* Hero Header */}
       <View style={styles.header}>
         <View style={styles.headerDecorCircle} />
         <View style={styles.headerDecorCircle2} />
-
+        
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <View style={styles.headerIconWrap}>
@@ -289,38 +396,38 @@ export default function ChildrenScreen() {
           </View>
           <TouchableOpacity
             style={styles.addBtn}
-            onPress={() => router.push('/children/add')}
+            onPress={handleAddChild}
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={22} color={COLORS.onPrimary} />
           </TouchableOpacity>
         </View>
-
-        {/* Stats bar — only when children exist */}
+        
+        {/* Stats Bar - only when children exist */}
         {children.length > 0 && (
           <View style={styles.statsBar}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{children.length}</Text>
-              <Text style={styles.statLabel}>{children.length === 1 ? 'Child' : 'Children'}</Text>
+              <Text style={styles.statValue}>{stats.total}</Text>
+              <Text style={styles.statLabel}>{stats.total === 1 ? 'Child' : 'Children'}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{onTrack}</Text>
+              <Text style={styles.statValue}>{stats.onTrack}</Text>
               <Text style={styles.statLabel}>On Track</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{upcoming}</Text>
+              <Text style={styles.statValue}>{stats.upcoming}</Text>
               <Text style={styles.statLabel}>Upcoming Visit</Text>
             </View>
           </View>
         )}
       </View>
-
-      {/* ── List ── */}
+      
+      {/* FlatList */}
       <FlatList
         data={children as Child[]}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         contentContainerStyle={[
           styles.listContent,
           children.length === 0 && styles.listContentEmpty,
@@ -334,48 +441,22 @@ export default function ChildrenScreen() {
           />
         }
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        renderItem={({ item }) => (
-          <ChildCard
-            item={item}
-            isSelected={item.id === selectedChildId}
-            onPress={() => {
-              selectChild(item.id);
-              router.push(`/children/${item.id}`);
-            }}
-          />
-        )}
-        ListHeaderComponent={
-          children.length > 0 ? (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                {children.length === 1 ? '1 Child' : `${children.length} Children`}
-              </Text>
-              <TouchableOpacity onPress={() => router.push('/children/add')}>
-                <Text style={styles.sectionAction}>+ Add child</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null
-        }
-        ListEmptyComponent={<EmptyState onAdd={() => router.push('/children/add')} />}
-        ListFooterComponent={<>
-          <View style={styles.tipCard}>
-            <View style={styles.tipAccent} />
-            <View style={{ flex: 1, padding: 12 }}>
-              <Text style={styles.tipTitle}>💡 Did you know?</Text>
-              <Text style={styles.tipBody}>
-                Regular growth monitoring helps detect malnutrition early. WHO recommends monthly check-ups for children under 2 years.
-              </Text>
-            </View>
-          </View>
-          <View style={{ height: 140 }} />
-        </>}
+        renderItem={renderItem}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={<EmptyState onAdd={handleAddChild} />}
+        ListFooterComponent={renderFooter}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={5}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
-
-      {/* ── FAB ── */}
+      
+      {/* FAB - only when children exist */}
       {children.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, Platform.OS === 'web' ? styles.fabWeb : styles.fabNative]}
-          onPress={() => router.push('/children/add')}
+          onPress={handleAddChild}
           activeOpacity={0.85}
         >
           <Ionicons name="add" size={28} color={COLORS.onPrimary} />
@@ -385,135 +466,483 @@ export default function ChildrenScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles (Optimized and organized) ─────────────────────────────────────────
 const styles = StyleSheet.create({
-  container:         { flex: 1, backgroundColor: COLORS.background },
-  loadingContainer:  { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText:       { fontSize: 14, color: COLORS.textMuted, fontWeight: '500' },
-
+  container: { flex: 1, backgroundColor: COLORS.background },
+  
+  loadingContainer: { 
+    flex: 1, 
+    backgroundColor: COLORS.background, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 12 
+  },
+  loadingText: { 
+    fontSize: 14, 
+    color: COLORS.textMuted, 
+    fontWeight: '500',
+    fontFamily: FONTS?.regular,
+  },
+  
   // Header
   header: {
     backgroundColor: COLORS.primary,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    paddingTop: 56,
+    paddingTop: Platform.OS === 'ios' ? 56 : 48,
     paddingBottom: 20,
     paddingHorizontal: 20,
     overflow: 'hidden',
-
     ...Platform.select({
-
-      ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16 },
-
+      ios: { 
+        shadowColor: COLORS.primary, 
+        shadowOffset: { width: 0, height: 8 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 16 
+      },
       android: { elevation: 13 },
-
-      default: {},
-
     }),
-    elevation: 8,
   },
   headerDecorCircle: {
-    position: 'absolute', width: 180, height: 180, borderRadius: 90,
-    borderWidth: 30, borderColor: 'rgba(255,255,255,0.07)', top: -40, right: -30,
+    position: 'absolute', 
+    width: 180, 
+    height: 180, 
+    borderRadius: 90,
+    borderWidth: 30, 
+    borderColor: 'rgba(255,255,255,0.07)', 
+    top: -40, 
+    right: -30,
   },
   headerDecorCircle2: {
-    position: 'absolute', width: 100, height: 100, borderRadius: 50,
-    borderWidth: 20, borderColor: 'rgba(255,255,255,0.05)', bottom: 10, left: -20,
+    position: 'absolute', 
+    width: 100, 
+    height: 100, 
+    borderRadius: 50,
+    borderWidth: 20, 
+    borderColor: 'rgba(255,255,255,0.05)', 
+    bottom: 10, 
+    left: -20,
   },
-  headerContent:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerLeft:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerIconWrap: { width: 38, height: 38, borderRadius: RADIUS.md, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center' },
-  headerLabel:    { fontSize: 11, color: 'rgba(255,255,255,0.70)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  headerTitle:    { fontSize: 22, fontWeight: '800', color: COLORS.onPrimary, marginTop: 1 },
-  addBtn:         { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-
-  // Stats bar
-  statsBar:    { flexDirection: 'row', marginTop: 18, backgroundColor: 'rgba(255,255,255,0.13)', borderRadius: RADIUS.xl, paddingVertical: 12, paddingHorizontal: 8 },
-  statItem:    { flex: 1, alignItems: 'center' },
-  statValue:   { fontSize: 20, fontWeight: '800', color: COLORS.onPrimary },
-  statLabel:   { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.20)', marginVertical: 4 },
-
+  headerContent: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between' 
+  },
+  headerLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12 
+  },
+  headerIconWrap: { 
+    width: 38, 
+    height: 38, 
+    borderRadius: RADIUS.md, 
+    backgroundColor: 'rgba(255,255,255,0.95)', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  headerLabel: { 
+    fontSize: 11, 
+    color: 'rgba(255,255,255,0.70)', 
+    fontWeight: '600', 
+    textTransform: 'uppercase', 
+    letterSpacing: 1,
+    fontFamily: FONTS?.semibold,
+  },
+  headerTitle: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    color: COLORS.onPrimary, 
+    marginTop: 1,
+    fontFamily: FONTS?.extrabold,
+  },
+  addBtn: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    backgroundColor: 'rgba(255,255,255,0.18)', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  
+  // Stats Bar
+  statsBar: { 
+    flexDirection: 'row', 
+    marginTop: 18, 
+    backgroundColor: 'rgba(255,255,255,0.13)', 
+    borderRadius: RADIUS.xl, 
+    paddingVertical: 12, 
+    paddingHorizontal: 8 
+  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statValue: { 
+    fontSize: 20, 
+    fontWeight: '800', 
+    color: COLORS.onPrimary,
+    fontFamily: FONTS?.extrabold,
+  },
+  statLabel: { 
+    fontSize: 11, 
+    color: 'rgba(255,255,255,0.75)', 
+    fontWeight: '600', 
+    marginTop: 2,
+    fontFamily: FONTS?.semibold,
+  },
+  statDivider: { 
+    width: 1, 
+    backgroundColor: 'rgba(255,255,255,0.20)', 
+    marginVertical: 4 
+  },
+  
   // List
-  listContent:      { paddingHorizontal: 16, paddingTop: 16 },
-  listContentEmpty: { flexGrow: 1 },
-  sectionHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle:     { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary },
-  sectionAction:    { fontSize: 13, fontWeight: '700', color: COLORS.primary },
-
+  listContent: { 
+    paddingHorizontal: 16, 
+    paddingTop: 16 
+  },
+  listContentEmpty: { 
+    flexGrow: 1 
+  },
+  sectionHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    marginBottom: 12 
+  },
+  sectionTitle: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: COLORS.textPrimary,
+    fontFamily: FONTS?.extrabold,
+  },
+  sectionAction: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: COLORS.primary,
+    fontFamily: FONTS?.semibold,
+  },
+  
   // Card
   card: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.white, borderRadius: 18,
-    padding: 14, borderWidth: 1.5, borderColor: COLORS.border, gap: 12,
+    flexDirection: 'row', 
+    alignItems: 'center',
+    backgroundColor: COLORS.white, 
+    borderRadius: 18,
+    padding: 14, 
+    borderWidth: 1.5, 
+    borderColor: COLORS.border, 
+    gap: 12,
     overflow: 'hidden',
-    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 3,
+    ...Platform.select({ 
+      ios: { 
+        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 2 }, 
+        shadowOpacity: 0.07, 
+        shadowRadius: 8 
+      }, 
+      android: { elevation: 3 },
+    }),
   },
   cardActive: {
-    borderColor: COLORS.primary, borderWidth: 2,
+    borderColor: COLORS.primary, 
+    borderWidth: 2,
     backgroundColor: '#F5FAFF',
-    shadowColor: COLORS.primary, shadowOpacity: 0.12, elevation: 5,
+    ...Platform.select({
+      ios: { shadowColor: COLORS.primary, shadowOpacity: 0.12 },
+      android: { elevation: 5 },
+    }),
   },
   activeAccentBar: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
+    position: 'absolute', 
+    left: 0, 
+    top: 0, 
+    bottom: 0, 
+    width: 4,
     backgroundColor: COLORS.primary,
-    borderTopLeftRadius: 18, borderBottomLeftRadius: 18,
   },
-
+  
   // Avatar
-  avatar:         { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { fontSize: 18, fontWeight: '800', color: COLORS.white, letterSpacing: -0.5 },
-  avatarDot:      { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: COLORS.white },
-
-  // Card body
-  cardBody:    { flex: 1, gap: 5 },
-  cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  cardName:    { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, flexShrink: 1 },
-  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  agePill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: RADIUS.full },
-  agePillText: { fontSize: 11, fontWeight: '700' },
-  dobText:     { fontSize: 11, color: COLORS.textMuted, fontWeight: '500' },
-
-  // Vaccine
-  vaccineRow:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  vaccineBarBg:   { flex: 1, height: 4, backgroundColor: '#E2E8F0', borderRadius: RADIUS.full, overflow: 'hidden' },
-  vaccineBarFill: { height: 4, backgroundColor: COLORS.given, borderRadius: RADIUS.full },
-  vaccineLabel:   { fontSize: 10, color: COLORS.textMuted, fontWeight: '600', minWidth: 28 },
-
-  // Next visit
-  nextVisitRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  nextVisitText: { fontSize: 11, color: COLORS.due, fontWeight: '600' },
-
-  // Card right
-  cardRight:           { alignItems: 'flex-end', gap: 8 },
-  growthBadge:         { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: RADIUS.full },
-  growthBadgeText:     { fontSize: 10, fontWeight: '700' },
-  chevronCircle:       { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
-  chevronCircleActive: { backgroundColor: COLORS.primary },
-
-  // Active pill
-  activePill:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.primary, paddingHorizontal: 7, paddingVertical: 3, borderRadius: RADIUS.full },
-  activePillText: { color: COLORS.onPrimary, fontSize: 10, fontWeight: '700' },
-
-  // Empty state
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingTop: 40 },
-  emptyRingOuter: { width: 136, height: 136, borderRadius: 68, backgroundColor: `${COLORS.primary}0D`, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-  emptyRingInner: { width: 108, height: 108, borderRadius: 54, backgroundColor: `${COLORS.primary}18`, alignItems: 'center', justifyContent: 'center' },
-  emptyIconCircle:{ width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle:     { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center' },
-  emptySubtitle:  { fontSize: 13, color: COLORS.textMuted, marginTop: 8, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
-  emptyHints:     { width: '100%', gap: 10, marginBottom: 32 },
-  emptyHintRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: 12, borderWidth: 1, borderColor: COLORS.border, elevation: 1 },
-  emptyHintIcon:  { width: 34, height: 34, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
-  emptyHintText:  { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
-  emptyBtn:       { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 15, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', gap: 8, ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.30, shadowRadius: 8 }, android: { elevation: 6 }, default: {} }), elevation: 6 },
-  emptyBtnText:   { color: COLORS.onPrimary, fontWeight: '700', fontSize: 15 },
-
+  avatar: { 
+    width: 52, 
+    height: 52, 
+    borderRadius: 26, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  avatarInitials: { 
+    fontSize: 18, 
+    fontWeight: '800', 
+    color: COLORS.white, 
+    letterSpacing: -0.5,
+    fontFamily: FONTS?.extrabold,
+  },
+  avatarDot: { 
+    position: 'absolute', 
+    bottom: 1, 
+    right: 1, 
+    width: 12, 
+    height: 12, 
+    borderRadius: 6, 
+    borderWidth: 2, 
+    borderColor: COLORS.white 
+  },
+  
+  // Card Body
+  cardBody: { flex: 1, gap: 5 },
+  cardNameRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    flexWrap: 'wrap' 
+  },
+  cardName: { 
+    fontSize: 15, 
+    fontWeight: '700', 
+    color: COLORS.textPrimary, 
+    flexShrink: 1,
+    fontFamily: FONTS?.bold,
+  },
+  cardMetaRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8 
+  },
+  agePill: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    paddingHorizontal: 7, 
+    paddingVertical: 3, 
+    borderRadius: RADIUS.full 
+  },
+  agePillText: { 
+    fontSize: 11, 
+    fontWeight: '700',
+    fontFamily: FONTS?.bold,
+  },
+  dobText: { 
+    fontSize: 11, 
+    color: COLORS.textMuted, 
+    fontWeight: '500',
+    fontFamily: FONTS?.regular,
+  },
+  
+  // Vaccine Progress
+  vaccineRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 5 
+  },
+  vaccineBarBg: { 
+    flex: 1, 
+    height: 4, 
+    backgroundColor: '#E2E8F0', 
+    borderRadius: RADIUS.full, 
+    overflow: 'hidden' 
+  },
+  vaccineBarFill: { 
+    height: 4, 
+    backgroundColor: COLORS.given, 
+    borderRadius: RADIUS.full 
+  },
+  vaccineLabel: { 
+    fontSize: 10, 
+    color: COLORS.textMuted, 
+    fontWeight: '600', 
+    minWidth: 28,
+    fontFamily: FONTS?.semibold,
+  },
+  
+  // Next Visit
+  nextVisitRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4 
+  },
+  nextVisitText: { 
+    fontSize: 11, 
+    color: COLORS.due, 
+    fontWeight: '600',
+    fontFamily: FONTS?.semibold,
+  },
+  
+  // Card Right
+  cardRight: { 
+    alignItems: 'flex-end', 
+    gap: 8 
+  },
+  growthBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    paddingHorizontal: 7, 
+    paddingVertical: 3, 
+    borderRadius: RADIUS.full 
+  },
+  growthBadgeText: { 
+    fontSize: 10, 
+    fontWeight: '700',
+    fontFamily: FONTS?.bold,
+  },
+  chevronCircle: { 
+    width: 28, 
+    height: 28, 
+    borderRadius: 14, 
+    backgroundColor: COLORS.background, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  chevronCircleActive: { 
+    backgroundColor: COLORS.primary 
+  },
+  
+  // Active Pill
+  activePill: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    backgroundColor: COLORS.primary, 
+    paddingHorizontal: 7, 
+    paddingVertical: 3, 
+    borderRadius: RADIUS.full 
+  },
+  activePillText: { 
+    color: COLORS.onPrimary, 
+    fontSize: 10, 
+    fontWeight: '700',
+    fontFamily: FONTS?.bold,
+  },
+  
+  // Empty State
+  emptyContainer: { 
+    flex: 1, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingHorizontal: 32, 
+    paddingTop: 40 
+  },
+  emptyRingOuter: { 
+    width: 136, 
+    height: 136, 
+    borderRadius: 68, 
+    backgroundColor: `${COLORS.primary}0D`, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 24 
+  },
+  emptyRingInner: { 
+    width: 108, 
+    height: 108, 
+    borderRadius: 54, 
+    backgroundColor: `${COLORS.primary}18`, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  emptyIconCircle: { 
+    width: 84, 
+    height: 84, 
+    borderRadius: 42, 
+    backgroundColor: COLORS.primaryLight, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  emptyTitle: { 
+    fontSize: 20, 
+    fontWeight: '800', 
+    color: COLORS.textPrimary, 
+    textAlign: 'center',
+    fontFamily: FONTS?.extrabold,
+  },
+  emptySubtitle: { 
+    fontSize: 13, 
+    color: COLORS.textMuted, 
+    marginTop: 8, 
+    textAlign: 'center', 
+    lineHeight: 20, 
+    marginBottom: 28,
+    fontFamily: FONTS?.regular,
+  },
+  emptyHints: { 
+    width: '100%', 
+    gap: 10, 
+    marginBottom: 32 
+  },
+  emptyHintRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12, 
+    backgroundColor: COLORS.white, 
+    borderRadius: RADIUS.lg, 
+    padding: 12, 
+    borderWidth: 1, 
+    borderColor: COLORS.border,
+    ...Platform.select({ ios: { shadowOpacity: 0.05 }, android: { elevation: 1 } }),
+  },
+  emptyHintIcon: { 
+    width: 34, 
+    height: 34, 
+    borderRadius: RADIUS.md, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  emptyHintText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: COLORS.textSecondary,
+    fontFamily: FONTS?.semibold,
+  },
+  emptyBtn: { 
+    backgroundColor: COLORS.primary, 
+    borderRadius: RADIUS.lg, 
+    paddingVertical: 15, 
+    paddingHorizontal: 28, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8,
+    ...Platform.select({ 
+      ios: { 
+        shadowColor: COLORS.primary, 
+        shadowOffset: { width: 0, height: 4 }, 
+        shadowOpacity: 0.30, 
+        shadowRadius: 8 
+      }, 
+      android: { elevation: 6 },
+    }),
+  },
+  emptyBtnText: { 
+    color: COLORS.onPrimary, 
+    fontWeight: '700', 
+    fontSize: 15,
+    fontFamily: FONTS?.bold,
+  },
+  
   // FAB
-  fab:       { position: 'absolute', width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', right: 20, ...Platform.select({ ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 }, android: { elevation: 6 }, default: {} }), elevation: 8 },
-  fabNative: { bottom: 158 },
-  fabWeb:    { bottom: 76 },
-
+  fab: { 
+    position: 'absolute', 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: COLORS.primary, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    right: 20,
+    ...Platform.select({ 
+      ios: { 
+        shadowColor: COLORS.primary, 
+        shadowOffset: { width: 0, height: 4 }, 
+        shadowOpacity: 0.35, 
+        shadowRadius: 10 
+      }, 
+      android: { elevation: 8 },
+    }),
+  },
+  fabNative: { 
+    bottom: Platform.OS === 'ios' ? 158 : 148 
+  },
+  fabWeb: { 
+    bottom: 76 
+  },
+  
+  // Tip Card
   tipCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -523,8 +952,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    ...Platform.select({ ios: { shadowOpacity: 0.05 }, android: { elevation: 1 } }),
   },
-  tipAccent: { width: 4, backgroundColor: '#208AEF' },
-  tipTitle: { fontSize: 13, fontWeight: '800', color: '#208AEF', marginBottom: 4 },
-  tipBody: { fontSize: 12, color: '#64748B', lineHeight: 18 },
+  tipAccent: { 
+    width: 4, 
+    backgroundColor: '#208AEF' 
+  },
+  tipContent: { 
+    flex: 1, 
+    padding: 12 
+  },
+  tipTitle: { 
+    fontSize: 13, 
+    fontWeight: '800', 
+    color: '#208AEF', 
+    marginBottom: 4,
+    fontFamily: FONTS?.extrabold,
+  },
+  tipBody: { 
+    fontSize: 12, 
+    color: '#64748B', 
+    lineHeight: 18,
+    fontFamily: FONTS?.regular,
+  },
 });

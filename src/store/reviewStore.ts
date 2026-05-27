@@ -95,7 +95,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       const { data, error } = await supabase
         .from('app_reviews')
         .select('*')
-        .eq('auth_user_id', userId)
+        .eq('user_id', userId)   // ✅ fixed: was 'auth_user_id'
         .maybeSingle();
 
       if (error) throw error;
@@ -129,7 +129,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       const { data: profile } = await supabase
         .from('parents')
         .select('full_name')
-        .eq('auth_user_id', userId)
+        .eq('id', userId)        // ✅ fixed: was 'auth_user_id'
         .maybeSingle();
 
       const displayName: string = profile?.full_name ?? 'Anonymous';
@@ -137,7 +137,6 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       const existing = get().myReview;
 
       if (existing) {
-        // UPDATE existing review
         const { error } = await supabase
           .from('app_reviews')
           .update({
@@ -148,11 +147,10 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id)
-          .eq('user_id', userId); // safety guard — satisfies RLS USING clause
+          .eq('user_id', userId);
 
         if (error) throw error;
       } else {
-        // INSERT new review
         const { error } = await supabase
           .from('app_reviews')
           .insert({
@@ -166,7 +164,6 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
         if (error) throw error;
       }
 
-      // Refresh both lists so the UI is consistent
       await get().fetchReviews();
       await get().fetchMyReview(userId);
 
@@ -189,7 +186,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
         .from('app_reviews')
         .delete()
         .eq('id', existing.id)
-        .eq('user_id', userId); // safety guard — satisfies RLS USING clause
+        .eq('user_id', userId);
 
       if (error) throw error;
 
@@ -206,7 +203,6 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   toggleHelpful: async (reviewId, userId) => {
     const voted = get().myHelpfulVotes.has(reviewId);
 
-    // Optimistic UI update first
     const nextVotes = new Set(get().myHelpfulVotes);
     if (voted) {
       nextVotes.delete(reviewId);
@@ -222,7 +218,6 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       ),
     });
 
-    // Persist to DB (the trigger keeps helpful_count in sync server-side)
     try {
       if (voted) {
         const { error } = await supabase
@@ -264,7 +259,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       const { data } = await supabase
         .from('rating_prompt_log')
         .select('prompted_at')
-        .eq('auth_user_id', userId)
+        .eq('user_id', userId)   // ✅ fixed: was 'auth_user_id'
         .maybeSingle();
 
       if (!data) return true;

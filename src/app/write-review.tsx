@@ -88,7 +88,7 @@ export default function WriteReviewScreen() {
         contentContainerStyle={s.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={s.prompt}>How would you rate your experience with mamaTOTO?</Text>
+        <Text style={s.prompt}>How would you rate your experience with ZuriHealth?</Text>
 
         {/* Star picker */}
         <View style={s.starRow}>

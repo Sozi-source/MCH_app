@@ -1,33 +1,24 @@
-﻿import { createClient } from '@supabase/supabase-js';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 const supabaseUrl     = process.env.EXPO_PUBLIC_SUPABASE_URL     ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-
-const webStorage = {
-  getItem:    (key: string) => Promise.resolve(typeof window !== 'undefined' ? localStorage.getItem(key) : null),
-  setItem:    (key: string, value: string) => Promise.resolve(typeof window !== 'undefined' ? localStorage.setItem(key, value) : undefined),
-  removeItem: (key: string) => Promise.resolve(typeof window !== 'undefined' ? localStorage.removeItem(key) : undefined),
-};
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken:   true,
     persistSession:     true,
     detectSessionInUrl: Platform.OS === 'web',
-    storage:            Platform.OS === 'web' ? webStorage : undefined,
+    // On web: use localStorage via the default browser storage (no custom adapter needed).
+    // On native: use AsyncStorage so sessions survive app restarts.
+    storage: Platform.OS === 'web' ? undefined : AsyncStorage,
   },
 });
 
-// Silently sign out if the stored refresh token is invalid or expired.
-// Prevents the 'Refresh Token Not Found' error on app launch.
+// Handle invalid/expired refresh tokens silently — sign out so the app
+// redirects to login instead of getting stuck in a broken auth state.
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'TOKEN_REFRESHED') return;
-});
-
-supabase.auth.getSession().then(({ error }) => {
-  if (error?.message?.includes('Refresh Token Not Found') ||
-      error?.message?.includes('Invalid Refresh Token')) {
-    supabase.auth.signOut();
-  }
+  if (event === 'SIGNED_OUT') return;
 });

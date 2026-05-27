@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * src/app/(tabs)/nutrition.tsx
  * ─────────────────────────────────────────────────────────────
  * mamaTOTO — Nutrition Screen (Age-Gated)
