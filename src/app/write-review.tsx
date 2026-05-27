@@ -1,6 +1,6 @@
 ﻿/**
  * src/app/(tabs)/write-review.tsx
- * mamaTOTO — Write / Edit Review Screen
+ * ZuriHealth — Write / Edit Review Screen
  */
 import { useReviewStore } from '@/store/reviewStore';
 import { useAuthStore } from '@/store/authStore';

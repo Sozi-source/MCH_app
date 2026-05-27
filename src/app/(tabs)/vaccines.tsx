@@ -1,7 +1,10 @@
 ﻿// src/app/(tabs)/vaccines.tsx
-// mamaTOTO — Immunization Screen
+// ZuriHealth — Immunization Screen
 
 import { COLORS, FONTS, HEADER, RADIUS } from '@/lib/theme';
+import { Toast } from '@/components/Toast';
+import { VaccineSuccessOverlay } from '@/components/VaccineSuccessOverlay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useChildStore } from '@/store/childStore';
 import { useVaccineStore, VaccineRow, VaccineStatus } from '@/store/vaccineStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +16,7 @@ import {
   Keyboard,
   // FIX (nit): KeyboardAvoidingView removed — it was imported but never used.
   // Keyboard handling is done via manual keyboardHeight state instead.
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -22,8 +26,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  KeyboardEvent,
+  View
 } from 'react-native';
 
 
@@ -168,14 +171,12 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
     dayRef.current?.scrollTo({ x: (clampedDay - 1) * (DAY_W + 8), animated: true });
   }, [clampedDay, month, year]);
 
-  // FIX (bug): confirmDate is now a shared helper called from year, month, AND day
-  // changes. Previously onConfirm was only called from the day tap, so changing
-  // only the year or month would silently discard the selection.
+  // confirmDate is called ONLY from day tap so the picker stays open
+  // while the user scrolls through year and month first.
   const confirmDate = useCallback((y: number, m: number, d: number) => {
     const safeDays = new Date(y, m + 1, 0).getDate();
     const safeDay  = Math.min(d, safeDays);
     const date     = new Date(y, m, safeDay);
-    // FIX (warning): maxDate is now enforced for year/month changes too.
     if (date <= maxDate) onConfirm(date);
   }, [maxDate, onConfirm]);
 
@@ -198,7 +199,7 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
               key={y}
               disabled={disabled}
               style={[cpStyles.chip, { width: CHIP_W }, selected && cpStyles.chipSelected, disabled && cpStyles.chipDisabled]}
-              onPress={() => { setYear(y); confirmDate(y, month, clampedDay); }}
+              onPress={() => setYear(y)}
             >
               <Text style={[cpStyles.chipText, selected && cpStyles.chipTextSelected]}>{y}</Text>
             </TouchableOpacity>
@@ -223,7 +224,7 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
               key={m}
               disabled={disabled}
               style={[cpStyles.chip, { width: MONTH_W }, selected && cpStyles.chipSelected, disabled && cpStyles.chipDisabled]}
-              onPress={() => { setMonth(idx); confirmDate(year, idx, clampedDay); }}
+              onPress={() => setMonth(idx)}
             >
               <Text style={[cpStyles.chipText, selected && cpStyles.chipTextSelected]}>{m}</Text>
             </TouchableOpacity>
@@ -259,9 +260,17 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
         })}
       </ScrollView>
 
-      <TouchableOpacity style={cpStyles.cancelRow} onPress={onCancel}>
-        <Text style={cpStyles.cancelText}>Cancel</Text>
-      </TouchableOpacity>
+      <View style={cpStyles.footerRow}>
+        <TouchableOpacity style={cpStyles.cancelBtn} onPress={onCancel}>
+          <Text style={cpStyles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={cpStyles.confirmBtn}
+          onPress={() => confirmDate(year, month, clampedDay)}
+        >
+          <Text style={cpStyles.confirmText}>Confirm Date</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -316,23 +325,99 @@ const cpStyles = StyleSheet.create({
   chipTextSelected: {
     color: COLORS.white,
   },
-  cancelRow: {
-    alignItems: 'center',
-    paddingVertical: 10,
+  footerRow: {
+    flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     marginTop: 2,
+  },
+  cancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRightWidth: 1,
+    borderRightColor: COLORS.border,
   },
   cancelText: {
     fontFamily: FONTS.semibold,
     fontSize: 13,
     color: COLORS.textMuted,
   },
+  confirmBtn: {
+    flex: 2,
+    alignItems: 'center',
+    paddingVertical: 12,
+    backgroundColor: COLORS.primaryLight,
+  },
+  confirmText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    color: COLORS.primary,
+  },
 });
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// ─── Milestone groups (age-based grouping for default view) ──────────────────
+
+const MILESTONE_GROUPS: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  matcher: (row: VaccineRow) => boolean;
+}[] = [
+  {
+    label: 'At Birth',
+    icon: 'heart-outline',
+    color: COLORS.primary,
+    matcher: r => r.schedule.due_at_weeks === 0,
+  },
+  {
+    label: '6 Weeks',
+    icon: 'calendar-outline',
+    color: COLORS.due,
+    matcher: r => r.schedule.due_at_weeks === 6,
+  },
+  {
+    label: '10 Weeks',
+    icon: 'calendar-outline',
+    color: COLORS.due,
+    matcher: r => r.schedule.due_at_weeks === 10,
+  },
+  {
+    label: '14 Weeks',
+    icon: 'calendar-outline',
+    color: COLORS.due,
+    matcher: r => r.schedule.due_at_weeks === 14,
+  },
+  {
+    label: '5 – 7 Months',
+    icon: 'sunny-outline',
+    color: COLORS.upcoming,
+    matcher: r =>
+      r.schedule.due_at_months !== null &&
+      r.schedule.due_at_months >= 5 &&
+      r.schedule.due_at_months <= 7,
+  },
+  {
+    label: '9 Months',
+    icon: 'sunny-outline',
+    color: COLORS.upcoming,
+    matcher: r => r.schedule.due_at_months === 9,
+  },
+  {
+    label: '18 – 24 Months',
+    icon: 'star-outline',
+    color: COLORS.given,
+    matcher: r =>
+      r.schedule.due_at_months !== null &&
+      r.schedule.due_at_months >= 18 &&
+      r.schedule.due_at_months <= 24,
+  },
+];
+
+// ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function VaccinesScreen() {
+  const insets = useSafeAreaInsets();
   const { activeChild } = useChildStore();
   const {
     vaccineRows,
@@ -352,6 +437,27 @@ export default function VaccinesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving]         = useState(false);
   const [loadError, setLoadError]   = useState<string | null>(null); // FIX (warning): surface fetch errors
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = useCallback((label: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  }, []);
+
+  const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+    visible: false, message: '', type: 'success',
+  });
+  const [successOverlay, setSuccessOverlay] = useState<{ visible: boolean; vaccineName: string }>({
+    visible: false, vaccineName: '',
+  });
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ visible: true, message, type });
+  }, []);
+
+  const showSuccess = useCallback((vaccineName: string) => {
+    setSuccessOverlay({ visible: true, vaccineName });
+    setTimeout(() => setSuccessOverlay({ visible: false, vaccineName: '' }), 2800);
+  }, []);
   const [modal, dispatch]           = useReducer(modalReducer, { kind: 'closed' });
 
   // FIX (bug): facilityInputRef, modalScrollRef, and keyboardHeight state/effect
@@ -359,19 +465,7 @@ export default function VaccinesScreen() {
   // Moved here so they are in scope where they are consumed.
   const facilityInputRef = useRef<TextInput>(null);
   const modalScrollRef   = useRef<ScrollView>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e: KeyboardEvent) => setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardHeight(0),
-    );
-    return () => { show.remove(); hide.remove(); };
-  }, []);
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const load = useCallback(async (force = false) => {
@@ -446,12 +540,14 @@ export default function VaccinesScreen() {
         );
       }
       dispatch({ type: 'CLOSE' });
+      showSuccess(row.schedule.vaccine_name);
+      showToast('Vaccine recorded successfully!', 'success');
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Could not save record.');
+      showToast(err.message ?? 'Could not save record.', 'error');
     } finally {
       setSaving(false);
     }
-  }, [modal, activeChild, markAsGiven, updateImmunization]);
+  }, [modal, activeChild, markAsGiven, updateImmunization, showSuccess, showToast]);
 
   const handleMarkMissed = useCallback((row: VaccineRow) => {
     if (!activeChild) return;
@@ -491,12 +587,13 @@ export default function VaccinesScreen() {
         );
       }
       dispatch({ type: 'CLOSE' });
+      showToast('Record removed.', 'info');
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Could not unmark record.');
+      showToast(err.message ?? 'Could not unmark record.', 'error');
     } finally {
       setSaving(false);
     }
-  }, [modal, activeChild, unmarkImmunization]);
+  }, [modal, activeChild, unmarkImmunization, showToast]);
 
   // ── Row renderer ─────────────────────────────────────────────────────────
   const renderRow = useCallback(({ item: row }: { item: VaccineRow }) => {
@@ -733,12 +830,13 @@ export default function VaccinesScreen() {
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading schedule…</Text>
         </View>
-      ) : (
+      ) : filter !== 'all' ? (
+        /* ── Filtered view: flat list (unchanged behaviour) ── */
         <FlatList
           data={filtered}
           keyExtractor={item => item.schedule.id}
           renderItem={renderRow}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
           initialNumToRender={10}
           maxToRenderPerBatch={8}
           windowSize={5}
@@ -756,12 +854,77 @@ export default function VaccinesScreen() {
                 <Ionicons name="checkmark-done-circle-outline" size={28} color={COLORS.primary} />
               </View>
               <Text style={styles.emptyTitle}>No vaccines here</Text>
-              <Text style={styles.emptySubtitle}>
-                {filter === 'all' ? 'The schedule is empty.' : `No ${filter} vaccines found.`}
-              </Text>
+              <Text style={styles.emptySubtitle}>{`No ${filter} vaccines found.`}</Text>
             </View>
           }
         />
+      ) : (
+        /* ── Default view: grouped by age milestone ── */
+        <ScrollView
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary}
+              colors={[COLORS.primary]}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {MILESTONE_GROUPS.map(group => {
+            const rows = vaccineRows.filter(r => group.matcher(r));
+            if (rows.length === 0) return null;
+            const hasDueOrMissed = rows.some(r => r.status === 'due' || r.status === 'missed');
+            const isCollapsed = collapsedGroups[group.label] ?? !hasDueOrMissed;
+            return (
+              <View key={group.label} style={styles.milestoneGroup}>
+                <TouchableOpacity
+                  style={styles.milestoneHeader}
+                  onPress={() => toggleGroup(group.label)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.milestoneIconWrap, { backgroundColor: group.color + '22' }]}>
+                    <Ionicons name={group.icon} size={15} color={group.color} />
+                  </View>
+                  <View style={styles.milestoneTitleBlock}>
+                    <Text style={styles.milestoneLabel}>{group.label}</Text>
+                    <Text style={styles.milestoneMeta}>
+                      {rows.filter(r => r.status === 'given').length}/{rows.length} given
+                      {hasDueOrMissed ? ' · action needed' : ''}
+                    </Text>
+                  </View>
+                  {hasDueOrMissed && (
+                    <View style={styles.milestoneAlertDot} />
+                  )}
+                  <Ionicons
+                    name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                    size={15}
+                    color={COLORS.textMuted}
+                  />
+                </TouchableOpacity>
+                {!isCollapsed && (
+                  <View style={styles.milestoneBody}>
+                    {rows.map(row => (
+                      <View key={row.schedule.id}>
+                        {renderRow({ item: row })}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+          {vaccineRows.length === 0 && (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="checkmark-done-circle-outline" size={28} color={COLORS.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>No vaccines here</Text>
+              <Text style={styles.emptySubtitle}>The schedule is empty.</Text>
+            </View>
+          )}
+        </ScrollView>
       )}
 
       {/* ── Mark / Edit modal ─────────────────────────────────────────────── */}
@@ -776,10 +939,14 @@ export default function VaccinesScreen() {
           style={styles.modalOverlay}
           onPress={() => { Keyboard.dismiss(); dispatch({ type: 'CLOSE' }); }}
         >
-          <Pressable
-            style={[styles.modalSheet, { marginBottom: keyboardHeight }]}
-            onPress={e => e.stopPropagation()}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
           >
+            <Pressable
+              style={styles.modalSheet}
+              onPress={e => e.stopPropagation()}
+            >
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>
               {modal.kind === 'edit' ? 'Edit Record' : 'Record Vaccine'}
@@ -857,39 +1024,40 @@ export default function VaccinesScreen() {
                 }}
               />
 
-              <View style={styles.modalFooter}>
-                {/* FIX (refinement): Cancel is never disabled — if the network call
-                    hangs, the user must always be able to dismiss the modal. */}
-                <TouchableOpacity
-                  style={styles.modalCancel}
-                  onPress={() => dispatch({ type: 'CLOSE' })}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalConfirm, saving && styles.modalBtnDisabled]}
-                  onPress={handleMarkGiven}
-                  disabled={saving}
-                >
-                  {saving
-                    ? <ActivityIndicator size="small" color={COLORS.white} />
-                    : (
-                      <>
-                        <Ionicons
-                          name={modal.kind === 'edit' ? 'save-outline' : 'checkmark-circle-outline'}
-                          size={16}
-                          color={COLORS.white}
-                        />
-                        <Text style={styles.modalConfirmText}>
-                          {modal.kind === 'edit' ? 'Save Changes' : 'Confirm'}
-                        </Text>
-                      </>
-                    )}
-                </TouchableOpacity>
-              </View>
             </ScrollView>
 
-          </Pressable>
+            {/* Pinned footer — lives outside ScrollView so keyboard never covers it */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => dispatch({ type: 'CLOSE' })}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirm, saving && styles.modalBtnDisabled]}
+                onPress={handleMarkGiven}
+                disabled={saving}
+              >
+                {saving
+                  ? <ActivityIndicator size="small" color={COLORS.white} />
+                  : (
+                    <>
+                      <Ionicons
+                        name={modal.kind === 'edit' ? 'save-outline' : 'checkmark-circle-outline'}
+                        size={16}
+                        color={COLORS.white}
+                      />
+                      <Text style={styles.modalConfirmText}>
+                        {modal.kind === 'edit' ? 'Save Changes' : 'Confirm'}
+                      </Text>
+                    </>
+                  )}
+              </TouchableOpacity>
+            </View>
+
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
 
@@ -939,6 +1107,20 @@ export default function VaccinesScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── Toast notification ──────────────────────────────────────────── */}
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
+
+      {/* ── Success overlay ──────────────────────────────────────────────── */}
+      <VaccineSuccessOverlay
+        visible={successOverlay.visible}
+        vaccineName={successOverlay.vaccineName}
+      />
 
     </View>
   );
@@ -1128,8 +1310,56 @@ const styles = StyleSheet.create({
 
   listContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 0,
     gap: 10,
+  },
+  milestoneGroup: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  milestoneHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 10,
+  },
+  milestoneIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  milestoneTitleBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  milestoneLabel: {
+    fontFamily: FONTS.semibold,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  milestoneMeta: {
+    fontFamily: FONTS.regular,
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  milestoneAlertDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.missed,
+    marginRight: 2,
+  },
+  milestoneBody: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    padding: 10,
+    gap: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -1303,6 +1533,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     maxHeight: '92%',
+    width: '100%',
+    flexShrink: 1,
   },
   unmarkSheet: {
     backgroundColor: COLORS.white,
@@ -1319,25 +1551,25 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   modalTitle: {
     fontFamily: FONTS.bold,
     fontSize: 17,
     color: COLORS.textPrimary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   modalSubRow: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   modalSubBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: RADIUS.full,
   },
   modalSubText: {
@@ -1347,13 +1579,16 @@ const styles = StyleSheet.create({
   // FIX (nit): modalBody (flex: 1) removed — it was defined but never applied
   // to any component, so it was dead code.
   modalBodyContent: {
-    paddingBottom: 8,
+    paddingBottom: 12,
   },
   modalFooter: {
     flexDirection: 'row',
     gap: 10,
-    paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.white,
   },
   inputLabel: {
     fontFamily: FONTS.semibold,

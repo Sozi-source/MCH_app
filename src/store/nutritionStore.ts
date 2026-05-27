@@ -1,25 +1,25 @@
-/**
+ï»¿/**
  * src/store/nutritionStore.ts
  *
- * Zustand store for the mamaTOTO nutrition module.
+ * Zustand store for the ZuriHealth nutrition module.
  * Fetches all nutrition reference data from Supabase tables seeded with
  * WHO CF Guideline 2023, UNICEF C-IYCF 2024, Kenya Clinical Nutrition
  * Manual 2010, and Kenya MIYCN Strategy 2023-2028.
  *
  * TABLES:
- *   nutrition_feeding_stages      — feeding stage cards by age band
- *   nutrition_food_groups         — WHO 8 MDD food groups
- *   nutrition_tips                — rotating IYCF tip cards
- *   nutrition_counselling_messages — per-age-band counselling messages
- *   nutrition_ebf_guidance        — EBF cards for 0-5 months
- *   nutrition_milestones          — feeding development + growth checkpoints
+ *   nutrition_feeding_stages      ï¿½ feeding stage cards by age band
+ *   nutrition_food_groups         ï¿½ WHO 8 MDD food groups
+ *   nutrition_tips                ï¿½ rotating IYCF tip cards
+ *   nutrition_counselling_messages ï¿½ per-age-band counselling messages
+ *   nutrition_ebf_guidance        ï¿½ EBF cards for 0-5 months
+ *   nutrition_milestones          ï¿½ feeding development + growth checkpoints
  */
 
 import { supabase } from '@/lib/supabase';
 import { create } from 'zustand';
 
 // -----------------------------------------------------------------------------
-// TYPES — mirror the Supabase table columns exactly
+// TYPES ï¿½ mirror the Supabase table columns exactly
 // -----------------------------------------------------------------------------
 
 export interface NutritionFeedingStage {
@@ -163,7 +163,7 @@ interface NutritionState {
   // Actions
   fetchAll: () => Promise<void>;
 
-  // Selectors — derived data based on child age
+  // Selectors ï¿½ derived data based on child age
   getFeedingStageForAge:        (ageMonths: number) => NutritionFeedingStage | null;
   getTipsForAge:                (ageMonths: number) => NutritionTip[];
   getCounsellingForAge:         (ageMonths: number) => CounsellingMessage[];
@@ -186,7 +186,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   hydrated:             false,
 
   // -- fetchAll ---------------------------------------------------------------
-  // Fetches all 6 nutrition tables in parallel. Safe to call multiple times —
+  // Fetches all 6 nutrition tables in parallel. Safe to call multiple times ï¿½
   // skips if already hydrated. Call once on app load or on nutrition tab focus.
   fetchAll: async () => {
   if (get().hydrated) return;

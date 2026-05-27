@@ -1,5 +1,5 @@
-// src/app/(tabs)/growth.tsx
-// mamaTOTO — Growth Tracker Screen
+﻿// src/app/(tabs)/growth.tsx
+// ZuriHealth — Growth Tracker Screen
 
 import { useT } from '@/hooks/useT';
 import { COLORS, RADIUS } from '@/lib/theme';

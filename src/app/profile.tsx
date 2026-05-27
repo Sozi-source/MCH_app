@@ -1,6 +1,6 @@
 ﻿/**
  * src/app/profile.tsx
- * mamaTOTO — Profile Screen
+ * ZuriHealth — Profile Screen
  */
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';

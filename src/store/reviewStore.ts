@@ -1,6 +1,6 @@
 ﻿/**
  * src/store/reviewStore.ts
- * mamaTOTO — App Reviews & Ratings store
+ * ZuriHealth — App Reviews & Ratings store
  */
 import { supabase } from '@/lib/supabase';
 import { create } from 'zustand';

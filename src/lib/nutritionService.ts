@@ -1,7 +1,7 @@
-/**
+﻿/**
  * src/lib/nutritionService.ts
  *
- * Shared types and pure functions for the mamaTOTO nutrition module.
+ * Shared types and pure functions for the ZuriHealth nutrition module.
  * Consumed by nutrition.tsx and useNutrition.ts hooks.
  *
  * No Supabase calls here — all data fetching lives in nutritionStore.ts.

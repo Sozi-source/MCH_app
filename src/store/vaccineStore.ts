@@ -127,10 +127,13 @@ function findImmunization(
   schedule: VaccineSchedule,
   dueDate: Date | null,
 ): Immunization | null {
-  const candidates = immunizations.filter(i =>
-    i.vaccine_name === schedule.vaccine_name &&
-    (i.dose_number === undefined || i.dose_number === null || i.dose_number === schedule.dose_number),
-  );
+  const candidates = immunizations.filter(i => {
+    if (i.vaccine_name !== schedule.vaccine_name) return false;
+    const iHasDose = i.dose_number !== null && i.dose_number !== undefined;
+    const sHasDose = schedule.dose_number !== null && schedule.dose_number !== undefined && schedule.dose_number !== 0;
+    if (iHasDose || sHasDose) return i.dose_number === schedule.dose_number;
+    return true;
+  });
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
   if (!dueDate) return candidates[0];
@@ -282,8 +285,7 @@ export const useVaccineStore = create<VaccineState>((set, get) => ({
     if (!schedule) throw new Error('Vaccine schedule not found.');
 
     const { immunizations } = get();
-    const row = get().vaccineRows.find(r => r.schedule.id === scheduleId);
-    const dueDate = getDueDate(schedule, row?.dueDate?.toISOString() ?? new Date().toISOString());
+    const dueDate = childDob ? getDueDate(schedule, childDob) : null;
     const scheduledDateStr = dueDate ? toDateStr(dueDate) : toDateStr(new Date());
     const givenDateStr = toDateStr(
       givenDate instanceof Date && !isNaN(givenDate.getTime()) ? givenDate : new Date(),

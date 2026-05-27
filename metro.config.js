@@ -16,6 +16,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   ) {
     return { type: 'empty' };
   }
+  // Lottie web dependency — not needed on native, stub it out for web bundler
+  if (
+    moduleName.includes('@lottiefiles/dotlottie-react') ||
+    (moduleName.includes('lottie-react-native') && platform === 'web')
+  ) {
+    return { type: 'empty' };
+  }
   return context.resolveRequest(context, moduleName, platform);
 };
 

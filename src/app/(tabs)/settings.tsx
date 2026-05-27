@@ -392,7 +392,7 @@ export default function SettingsScreen() {
             iconBg="#FFF8E6"
             iconColor="#F59E0B"
             title="Rate & Reviews"
-            sub="Share your experience with mamaTOTO"
+            sub="Share your experience with ZuriHealth"
             onPress={() => router.push('/(tabs)/reviews' as any)}
             right={
               <View style={s.chevronCircle}>

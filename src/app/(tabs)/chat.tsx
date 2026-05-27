@@ -730,7 +730,7 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingTop: 12,
+    paddingTop: 6,
   },
   inputBar: { 
     flexDirection: 'row', 

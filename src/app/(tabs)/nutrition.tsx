@@ -1,7 +1,7 @@
 ﻿﻿/**
  * src/app/(tabs)/nutrition.tsx
  * ─────────────────────────────────────────────────────────────
- * mamaTOTO — Nutrition Screen (Age-Gated)
+ * ZuriHealth — Nutrition Screen (Age-Gated)
  *
  * Reads child age and auto-renders the appropriate content:
  *   0–5 months   → Exclusive breastfeeding support only

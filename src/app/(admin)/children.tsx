@@ -1,6 +1,6 @@
 ﻿/**
  * src/app/(admin)/children.tsx
- * mamaTOTO — Admin: Children Management Screen
+ * ZuriHealth — Admin: Children Management Screen
  */
 import { supabase } from '@/lib/supabase';
 import { COLORS, RADIUS } from '@/lib/theme';
