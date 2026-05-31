@@ -2,21 +2,25 @@
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useChildStore } from '@/store/childStore';
-import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '@/lib/theme';
 
 const FAB_HIDDEN_SEGMENTS = ['(auth)', '(admin)'];
+const FAB_HIDDEN_SCREENS  = ['chat', 'index', 'nutrition'];
 
 function ZuriFAB() {
   const router = useRouter();
   const segments = useSegments();
-  const isRecovery = useRef(false);
   const currentGroup = segments[0] as string;
+  const allSegments = segments as string[];
+  const currentScreen = allSegments[1] ?? '';
+
   if (FAB_HIDDEN_SEGMENTS.includes(currentGroup)) return null;
+  if (FAB_HIDDEN_SCREENS.includes(currentScreen)) return null;
+  if (currentGroup === '(tabs)' && !currentScreen) return null
 
   return (
     <TouchableOpacity
@@ -24,7 +28,10 @@ function ZuriFAB() {
       onPress={() => router.push('/(tabs)/chat' as any)}
       activeOpacity={0.85}
     >
-      <Ionicons name="chatbubble-ellipses" size={26} color="#fff" />
+      <Image
+        source={require('@/assets/features/zuri-ai-256.png')}
+        style={styles.fabImage}
+      />
     </TouchableOpacity>
   );
 }
@@ -46,16 +53,11 @@ export default function RootLayout() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] event:', event);
       if (event === 'PASSWORD_RECOVERY') {
-        // Mark recovery in progress so the auth guard does not redirect to tabs.
-        // Do NOT call setSession here — that would trigger the guard.
         isRecovery.current = true;
         router.replace('/reset-password' as any);
         return;
       }
-      // Once the user updates their password, reset-password.tsx calls signOut.
-      // That fires SIGNED_OUT — clear the recovery flag so normal auth resumes.
       if (event === 'SIGNED_OUT') {
         isRecovery.current = false;
       }
@@ -108,21 +110,25 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   fab: {
-    position:        'absolute',
-    bottom:          Platform.OS === 'ios' ? 100 : 80,
-    right:           20,
-    width:           56,
-    height:          56,
-    borderRadius:    28,
-    backgroundColor: COLORS.primary,
-    alignItems:      'center',
-    justifyContent:  'center',
-    elevation:       6,
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 3 },
-    shadowOpacity:   0.2,
-    shadowRadius:    4,
-    zIndex:          999,
+    position:      'absolute',
+    bottom:        Platform.OS === 'ios' ? 115 : 95,
+    right:         20,
+    width:         56,
+    height:        56,
+    borderRadius:  28,
+    overflow:      'hidden',
+    elevation:     6,
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius:  4,
+    zIndex:        999,
+  },
+  fabImage: {
+    width:        56,
+    height:       56,
+    borderRadius: 28,
+    resizeMode:   'cover',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

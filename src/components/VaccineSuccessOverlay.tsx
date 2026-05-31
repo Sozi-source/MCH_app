@@ -1,14 +1,9 @@
-﻿// src/components/VaccineSuccessOverlay.tsx
+// src/components/VaccineSuccessOverlay.tsx
+// Rewritten to use React Native built-in Animated (no react-native-reanimated)
 import { COLORS, FONTS } from '@/lib/theme';
 import LottieView from 'lottie-react-native';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, Text } from 'react-native';
 
 interface VaccineSuccessOverlayProps {
   visible: boolean;
@@ -16,27 +11,28 @@ interface VaccineSuccessOverlayProps {
 }
 
 export function VaccineSuccessOverlay({ visible, vaccineName }: VaccineSuccessOverlayProps) {
-  const scale   = useSharedValue(0.85);
-  const opacity = useSharedValue(0);
+  const scale   = useRef(new Animated.Value(0.85)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
-      scale.value   = withSpring(1, { damping: 16, stiffness: 180 });
-      opacity.value = withTiming(1, { duration: 200 });
+      Animated.parallel([
+        Animated.spring(scale,   { toValue: 1, damping: 16, stiffness: 180, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
     } else {
-      scale.value   = withSpring(0.85);
-      opacity.value = withTiming(0, { duration: 150 });
+      Animated.parallel([
+        Animated.spring(scale,   { toValue: 0.85, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+      ]).start();
     }
   }, [visible]);
-
-  const overlayStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  const cardStyle    = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   if (!visible) return null;
 
   return (
-    <Animated.View style={[styles.overlay, overlayStyle]}>
-      <Animated.View style={[styles.card, cardStyle]}>
+    <Animated.View style={[styles.overlay, { opacity }]}>
+      <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
         <LottieView
           source={require('@/assets/animations/vaccine_success.json')}
           autoPlay

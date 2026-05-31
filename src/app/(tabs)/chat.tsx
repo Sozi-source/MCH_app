@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase';
 import type { GrowthRecord } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import {
   Image,
   ActivityIndicator,
@@ -334,10 +336,12 @@ function DataPill({ icon, label, ok }: { icon: string; label: string; ok: boolea
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
+  const insets = useSafeAreaInsets();
   const { children, selectedChildId, growthRecords, fetchGrowthRecords } = useChildStore();
   const { vaccineRows, fetchSchedules, fetchImmunizations, computeRows, schedules } = useVaccineStore();
   const { language } = useSettingsStore();
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
+  const tabBarHeight = useBottomTabBarHeight();
 
   const getAgeMonths = (): number => {
     if (!activeChild?.date_of_birth) return 0;
@@ -401,7 +405,7 @@ export default function ChatScreen() {
           achievedTitles:   achieved.slice(0, 10).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
           inProgressTitles: inProgress.slice(0, 5).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
         });
-      } catch (e) { console.warn('[chat] milestone fetch failed', e); }
+      } catch (e) {}
     })();
   }, [activeChild?.id]);
 
@@ -509,11 +513,11 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView 
-      style={s.root} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }} 
+      behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <View style={s.headerOrb1} />
         <View style={s.headerOrb2} />
         <View style={s.headerRow}>
@@ -588,7 +592,7 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
         {/* Extra safe area padding for bottom */}
-        <View style={s.bottomSafeArea} />
+        <View style={{ height: tabBarHeight }} />
       </View>
     </KeyboardAvoidingView>
   );
@@ -600,12 +604,12 @@ export default function ChatScreen() {
 
 const s = StyleSheet.create({
   root: { 
-    flex: 1, 
-    backgroundColor: COLORS.background,
-  },
+  flex: 1, 
+  backgroundColor: COLORS.background,
+  marginBottom: 0,
+},
   header: { 
-    backgroundColor: COLORS.primary, 
-    paddingTop: Platform.OS === 'ios' ? 56 : 44, 
+    backgroundColor: COLORS.primary,
     paddingBottom: 12, 
     paddingHorizontal: 16, 
     overflow: 'hidden' 
@@ -727,11 +731,18 @@ const s = StyleSheet.create({
   
   // Input section - Pushed down with proper spacing
   inputWrapper: {
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 6,
-  },
+  backgroundColor: COLORS.white,
+  borderTopWidth: 1,
+  borderTopColor: COLORS.border,
+  paddingTop: 8,
+  paddingBottom: 4,
+  // Ensure it's always above the tab bar
+  elevation: 10,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 4,
+},
   inputBar: { 
     flexDirection: 'row', 
     alignItems: 'flex-end', 
@@ -881,14 +892,18 @@ const b = StyleSheet.create({
     marginBottom: 16 
   },
   userBubble: { 
-    backgroundColor: COLORS.primary, 
-    borderRadius: 18, 
-    borderBottomRightRadius: 5, 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    maxWidth: W * 0.8, 
-    elevation: 4 
-  },
+  backgroundColor: COLORS.primary, 
+  borderRadius: 18, 
+  borderBottomRightRadius: 5, 
+  paddingHorizontal: 16, 
+  paddingVertical: 12, 
+  maxWidth: W * 0.8, 
+  elevation: 4,
+  shadowColor: COLORS.primary,
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 6,
+},
   userText: { 
     fontSize: 14, 
     lineHeight: 21, 

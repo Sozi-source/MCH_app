@@ -9,13 +9,12 @@ import { useChildStore } from '@/store/childStore';
 import { useVaccineStore, VaccineRow, VaccineStatus } from '@/store/vaccineStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Keyboard,
-  // FIX (nit): KeyboardAvoidingView removed — it was imported but never used.
-  // Keyboard handling is done via manual keyboardHeight state instead.
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -26,16 +25,14 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-
-
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FilterKey = 'all' | VaccineStatus;
 
-// ─── Modal state (replaces 7 flat useState calls) ─────────────────────────────
+// ─── Modal state ──────────────────────────────────────────────────────────────
 
 type ModalState =
   | { kind: 'closed' }
@@ -44,11 +41,11 @@ type ModalState =
   | { kind: 'unmark'; row: VaccineRow };
 
 type ModalAction =
-  | { type: 'OPEN_MARK';        row: VaccineRow }
-  | { type: 'OPEN_EDIT';        row: VaccineRow }
-  | { type: 'OPEN_UNMARK';      row: VaccineRow }
-  | { type: 'SET_FACILITY';     value: string }
-  | { type: 'SET_DATE';         date: Date }
+  | { type: 'OPEN_MARK';   row: VaccineRow }
+  | { type: 'OPEN_EDIT';   row: VaccineRow }
+  | { type: 'OPEN_UNMARK'; row: VaccineRow }
+  | { type: 'SET_FACILITY'; value: string }
+  | { type: 'SET_DATE';     date: Date }
   | { type: 'TOGGLE_PICKER' }
   | { type: 'HIDE_PICKER' }
   | { type: 'CLOSE' };
@@ -115,7 +112,7 @@ const SUMMARY_ACCENT: Record<string, string> = {
   Upcoming: COLORS.upcoming,
 };
 
-// ─── Date formatter (single source of truth) ──────────────────────────────────
+// ─── Date formatter ───────────────────────────────────────────────────────────
 
 function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
@@ -161,7 +158,7 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
   useEffect(() => {
     const yi = years.indexOf(year);
     if (yi >= 0) yearRef.current?.scrollTo({ x: yi * (CHIP_W + 8), animated: false });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally runs once on mount
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     monthRef.current?.scrollTo({ x: month * (MONTH_W + 8), animated: true });
@@ -171,8 +168,6 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
     dayRef.current?.scrollTo({ x: (clampedDay - 1) * (DAY_W + 8), animated: true });
   }, [clampedDay, month, year]);
 
-  // confirmDate is called ONLY from day tap so the picker stays open
-  // while the user scrolls through year and month first.
   const confirmDate = useCallback((y: number, m: number, d: number) => {
     const safeDays = new Date(y, m + 1, 0).getDate();
     const safeDay  = Math.min(d, safeDays);
@@ -192,7 +187,6 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
       >
         {years.map(y => {
           const selected = y === year;
-          // FIX (warning): disable future years that exceed maxDate
           const disabled = y > maxDate.getFullYear();
           return (
             <TouchableOpacity
@@ -216,9 +210,8 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
         keyboardShouldPersistTaps="handled"
       >
         {MONTH_SHORT.map((m, idx) => {
-          const selected  = idx === month;
-          // FIX (warning): disable months beyond maxDate for the selected year
-          const disabled  = year === maxDate.getFullYear() && idx > maxDate.getMonth();
+          const selected = idx === month;
+          const disabled = year === maxDate.getFullYear() && idx > maxDate.getMonth();
           return (
             <TouchableOpacity
               key={m}
@@ -241,8 +234,7 @@ function ChipDatePicker({ value, maxDate = new Date(), onConfirm, onCancel }: Ch
         keyboardShouldPersistTaps="handled"
       >
         {days.map(d => {
-          const selected = d === clampedDay;
-          // FIX (warning): disable days beyond maxDate when in the max month/year
+          const selected   = d === clampedDay;
           const atMaxMonth = year === maxDate.getFullYear() && month === maxDate.getMonth();
           const disabled   = atMaxMonth && d > maxDate.getDate();
           return (
@@ -309,22 +301,10 @@ const cpStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  // FIX (warning): style for disabled chips (future dates)
-  chipDisabled: {
-    opacity: 0.35,
-  },
-  chipText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  chipTextSelected: {
-    color: COLORS.white,
-  },
+  chipSelected:  { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  chipDisabled:  { opacity: 0.35 },
+  chipText:      { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.textSecondary },
+  chipTextSelected: { color: COLORS.white },
   footerRow: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -332,31 +312,15 @@ const cpStyles = StyleSheet.create({
     marginTop: 2,
   },
   cancelBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRightWidth: 1,
-    borderRightColor: COLORS.border,
+    flex: 1, alignItems: 'center', paddingVertical: 12,
+    borderRightWidth: 1, borderRightColor: COLORS.border,
   },
-  cancelText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 13,
-    color: COLORS.textMuted,
-  },
-  confirmBtn: {
-    flex: 2,
-    alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: COLORS.primaryLight,
-  },
-  confirmText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 13,
-    color: COLORS.primary,
-  },
+  cancelText:  { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.textMuted },
+  confirmBtn:  { flex: 2, alignItems: 'center', paddingVertical: 12, backgroundColor: COLORS.primaryLight },
+  confirmText: { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.primary },
 });
 
-// ─── Milestone groups (age-based grouping for default view) ──────────────────
+// ─── Milestone groups ─────────────────────────────────────────────────────────
 
 const MILESTONE_GROUPS: {
   label: string;
@@ -364,57 +328,132 @@ const MILESTONE_GROUPS: {
   color: string;
   matcher: (row: VaccineRow) => boolean;
 }[] = [
+  { label: 'At Birth',      icon: 'heart-outline',    color: COLORS.primary,  matcher: r => r.schedule.due_at_weeks === 0 },
+  { label: '6 Weeks',       icon: 'calendar-outline', color: COLORS.due,      matcher: r => r.schedule.due_at_weeks === 6 },
+  { label: '10 Weeks',      icon: 'calendar-outline', color: COLORS.due,      matcher: r => r.schedule.due_at_weeks === 10 },
+  { label: '14 Weeks',      icon: 'calendar-outline', color: COLORS.due,      matcher: r => r.schedule.due_at_weeks === 14 },
   {
-    label: 'At Birth',
-    icon: 'heart-outline',
-    color: COLORS.primary,
-    matcher: r => r.schedule.due_at_weeks === 0,
+    label: '5 – 7 Months', icon: 'sunny-outline', color: COLORS.upcoming,
+    matcher: r => r.schedule.due_at_months !== null && r.schedule.due_at_months >= 5 && r.schedule.due_at_months <= 7,
   },
+  { label: '9 Months',      icon: 'sunny-outline',    color: COLORS.upcoming, matcher: r => r.schedule.due_at_months === 9 },
   {
-    label: '6 Weeks',
-    icon: 'calendar-outline',
-    color: COLORS.due,
-    matcher: r => r.schedule.due_at_weeks === 6,
-  },
-  {
-    label: '10 Weeks',
-    icon: 'calendar-outline',
-    color: COLORS.due,
-    matcher: r => r.schedule.due_at_weeks === 10,
-  },
-  {
-    label: '14 Weeks',
-    icon: 'calendar-outline',
-    color: COLORS.due,
-    matcher: r => r.schedule.due_at_weeks === 14,
-  },
-  {
-    label: '5 – 7 Months',
-    icon: 'sunny-outline',
-    color: COLORS.upcoming,
-    matcher: r =>
-      r.schedule.due_at_months !== null &&
-      r.schedule.due_at_months >= 5 &&
-      r.schedule.due_at_months <= 7,
-  },
-  {
-    label: '9 Months',
-    icon: 'sunny-outline',
-    color: COLORS.upcoming,
-    matcher: r => r.schedule.due_at_months === 9,
-  },
-  {
-    label: '18 – 24 Months',
-    icon: 'star-outline',
-    color: COLORS.given,
-    matcher: r =>
-      r.schedule.due_at_months !== null &&
-      r.schedule.due_at_months >= 18 &&
-      r.schedule.due_at_months <= 24,
+    label: '18 – 24 Months', icon: 'star-outline', color: COLORS.given,
+    matcher: r => r.schedule.due_at_months !== null && r.schedule.due_at_months >= 18 && r.schedule.due_at_months <= 24,
   },
 ];
 
-// ─── Main screen ───────────────────────────────────────────────────────────────
+// ─── FIX 2: VaccineCard — extracted from renderRow ───────────────────────────
+// Previously `renderRow` was called directly as renderRow({ item: row }) inside
+// the grouped ScrollView, meaning it was just a plain function call — no memoization,
+// no component boundary, re-runs on every parent render. Extracting to a proper
+// React.memo component means each card only re-renders when its own row changes.
+interface VaccineCardProps {
+  row: VaccineRow;
+  onOpenMark:   (row: VaccineRow) => void;
+  onOpenEdit:   (row: VaccineRow) => void;
+  onOpenUnmark: (row: VaccineRow) => void;
+  onMarkMissed: (row: VaccineRow) => void;
+}
+
+const VaccineCard = React.memo(({
+  row,
+  onOpenMark,
+  onOpenEdit,
+  onOpenUnmark,
+  onMarkMissed,
+}: VaccineCardProps) => {
+  const cfg = STATUS_CONFIG[row.status];
+  return (
+    <View style={styles.card}>
+      <View style={[styles.cardAccent, { backgroundColor: cfg.color }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardTop}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.vaccineName} numberOfLines={1}>
+              {row.schedule.vaccine_name}
+            </Text>
+            {row.schedule.dose_number > 0 && (
+              <View style={styles.doseBadge}>
+                <Text style={styles.doseText}>Dose {row.schedule.dose_number}</Text>
+              </View>
+            )}
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+            <Ionicons name={cfg.icon} size={11} color={cfg.color} />
+            <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.diseases} numberOfLines={1}>
+          {row.schedule.diseases_covered}
+        </Text>
+
+        {row.dueDate && (
+          <View style={styles.metaRow}>
+            <Ionicons name="calendar-outline" size={11} color={COLORS.textMuted} />
+            <Text style={styles.metaText}>
+              {row.status === 'given'
+                ? `Given: ${formatDate(row.immunization?.given_date)}`
+                : `Due: ${formatDate(row.dueDate)}`}
+            </Text>
+          </View>
+        )}
+
+        {row.immunization?.facility ? (
+          <View style={styles.metaRow}>
+            <Ionicons name="location-outline" size={11} color={COLORS.textMuted} />
+            <Text style={styles.metaText} numberOfLines={1}>{row.immunization.facility}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.cardDivider} />
+
+        <View style={styles.cardActions}>
+          {row.status === 'given' && (
+            <>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => onOpenEdit(row)}>
+                <Ionicons name="pencil-outline" size={13} color={COLORS.primary} />
+                <Text style={[styles.actionText, { color: COLORS.primary }]}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => onOpenUnmark(row)}>
+                <Ionicons name="arrow-undo-outline" size={13} color={COLORS.textSecondary} />
+                <Text style={[styles.actionText, { color: COLORS.textSecondary }]}>Unmark</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {(row.status === 'due' || row.status === 'upcoming') && (
+            <>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={() => onOpenMark(row)}>
+                <Ionicons name="checkmark" size={13} color={COLORS.white} />
+                <Text style={[styles.actionText, { color: COLORS.white }]}>Mark Given</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => onMarkMissed(row)}>
+                <Ionicons name="close-outline" size={13} color={COLORS.missed} />
+                <Text style={[styles.actionText, { color: COLORS.missed }]}>Miss</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {row.status === 'missed' && (
+            <>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={() => onOpenMark(row)}>
+                <Ionicons name="checkmark" size={13} color={COLORS.white} />
+                <Text style={[styles.actionText, { color: COLORS.white }]}>Record Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => onOpenUnmark(row)}>
+                <Ionicons name="arrow-undo-outline" size={13} color={COLORS.textSecondary} />
+                <Text style={[styles.actionText, { color: COLORS.textSecondary }]}>Unmark</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+});
+VaccineCard.displayName = 'VaccineCard';
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function VaccinesScreen() {
   const insets = useSafeAreaInsets();
@@ -436,7 +475,7 @@ export default function VaccinesScreen() {
   const [filter, setFilter]         = useState<FilterKey>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving]         = useState(false);
-  const [loadError, setLoadError]   = useState<string | null>(null); // FIX (warning): surface fetch errors
+  const [loadError, setLoadError]   = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const toggleGroup = useCallback((label: string) => {
@@ -458,19 +497,22 @@ export default function VaccinesScreen() {
     setSuccessOverlay({ visible: true, vaccineName });
     setTimeout(() => setSuccessOverlay({ visible: false, vaccineName: '' }), 2800);
   }, []);
-  const [modal, dispatch]           = useReducer(modalReducer, { kind: 'closed' });
 
-  // FIX (bug): facilityInputRef, modalScrollRef, and keyboardHeight state/effect
-  // were declared inside ChipDatePicker but used in VaccinesScreen's JSX.
-  // Moved here so they are in scope where they are consumed.
+  const [modal, dispatch] = useReducer(modalReducer, { kind: 'closed' });
+
   const facilityInputRef = useRef<TextInput>(null);
   const modalScrollRef   = useRef<ScrollView>(null);
 
+  // ─── FIX 3: Infinite-loop guard via loadedRef ─────────────────────────────
+  // If any store function (fetchSchedules, fetchImmunizations, etc.) is an
+  // unstable reference — recreated on every render — then `load` gets a new
+  // reference on every render, the useEffect re-fires, and we get an infinite
+  // loop. The fix: use a ref to track whether the initial load has run, and
+  // separate the "on mount" load from the "on manual refresh" load so the
+  // effect dependency array only contains stable primitives (activeChild?.id).
+  const loadedRef = useRef(false);
 
-  // ── Load ─────────────────────────────────────────────────────────────────
   const load = useCallback(async (force = false) => {
-    // FIX (warning): errors are now caught and surfaced to the user instead of
-    // being swallowed, which previously left the screen silently empty on failure.
     setLoadError(null);
     try {
       if (!seeded) await seedScheduleIfEmpty();
@@ -483,12 +525,15 @@ export default function VaccinesScreen() {
       setLoadError(err?.message ?? 'Failed to load vaccine schedule.');
     }
   }, [seeded, activeChild, seedScheduleIfEmpty, fetchSchedules, fetchImmunizations, computeRows]);
-  // NOTE (warning): if store functions (fetchSchedules, fetchImmunizations, etc.)
-  // are not wrapped in useCallback inside the store, they will be new references
-  // on every render, causing this callback — and therefore the useEffect below —
-  // to re-run on every render (infinite loop). Ensure those store methods are stable.
 
-  useEffect(() => { load(); }, [load]);
+  // On mount and when active child changes — runs once per child, not per render.
+  // loadedRef prevents a double-fire if store functions are unstable on first render.
+  useEffect(() => {
+    if (loadedRef.current && !activeChild) return;
+    loadedRef.current = true;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChild?.id]); // depend only on the child's id, not the full object or load()
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -496,58 +541,12 @@ export default function VaccinesScreen() {
     setRefreshing(false);
   }, [load]);
 
-  // ── Filtered rows ────────────────────────────────────────────────────────
-  const filtered = useMemo(
-    () => filter === 'all' ? vaccineRows : vaccineRows.filter(r => r.status === filter),
-    [vaccineRows, filter],
-  );
-
-  // ── Counts ───────────────────────────────────────────────────────────────
-  const counts = useMemo(() => ({
-    given:    vaccineRows.filter(r => r.status === 'given').length,
-    due:      vaccineRows.filter(r => r.status === 'due').length,
-    missed:   vaccineRows.filter(r => r.status === 'missed').length,
-    upcoming: vaccineRows.filter(r => r.status === 'upcoming').length,
-  }), [vaccineRows]);
-
-  // ── Mutations ────────────────────────────────────────────────────────────
-  const handleMarkGiven = useCallback(async () => {
-    if (modal.kind !== 'mark' && modal.kind !== 'edit') return;
-    if (!activeChild) return;
-
-    // FIX (warning): capture modal fields into locals before the async call so
-    // that a race between the in-flight request and a modal close cannot cause
-    // stale closure reads on modal.kind / modal.row / etc.
-    const { kind, row, facility, givenDate } = modal;
-
-    setSaving(true);
-    try {
-      if (kind === 'edit' && row.immunization?.id) {
-        await updateImmunization(
-          row.immunization.id,
-          activeChild.id,
-          facility,
-          givenDate,
-          activeChild.date_of_birth,
-        );
-      } else {
-        await markAsGiven(
-          row.schedule.id,
-          activeChild.id,
-          facility,
-          givenDate,
-          activeChild.date_of_birth,
-        );
-      }
-      dispatch({ type: 'CLOSE' });
-      showSuccess(row.schedule.vaccine_name);
-      showToast('Vaccine recorded successfully!', 'success');
-    } catch (err: any) {
-      showToast(err.message ?? 'Could not save record.', 'error');
-    } finally {
-      setSaving(false);
-    }
-  }, [modal, activeChild, markAsGiven, updateImmunization, showSuccess, showToast]);
+  // ─── Stable dispatch callbacks for VaccineCard ───────────────────────────
+  // These are passed as props to VaccineCard. Using dispatch directly means
+  // React.memo on VaccineCard won't re-render when modal state changes.
+  const handleOpenMark   = useCallback((row: VaccineRow) => dispatch({ type: 'OPEN_MARK',   row }), []);
+  const handleOpenEdit   = useCallback((row: VaccineRow) => dispatch({ type: 'OPEN_EDIT',   row }), []);
+  const handleOpenUnmark = useCallback((row: VaccineRow) => dispatch({ type: 'OPEN_UNMARK', row }), []);
 
   const handleMarkMissed = useCallback((row: VaccineRow) => {
     if (!activeChild) return;
@@ -570,21 +569,49 @@ export default function VaccinesScreen() {
     ]);
   }, [activeChild, markAsMissed]);
 
+  // ── Filtered rows & counts ───────────────────────────────────────────────
+  const filtered = useMemo(
+    () => filter === 'all' ? vaccineRows : vaccineRows.filter(r => r.status === filter),
+    [vaccineRows, filter],
+  );
+
+  const counts = useMemo(() => ({
+    given:    vaccineRows.filter(r => r.status === 'given').length,
+    due:      vaccineRows.filter(r => r.status === 'due').length,
+    missed:   vaccineRows.filter(r => r.status === 'missed').length,
+    upcoming: vaccineRows.filter(r => r.status === 'upcoming').length,
+  }), [vaccineRows]);
+
+  // ── Mutations ────────────────────────────────────────────────────────────
+  const handleMarkGiven = useCallback(async () => {
+    if (modal.kind !== 'mark' && modal.kind !== 'edit') return;
+    if (!activeChild) return;
+    const { kind, row, facility, givenDate } = modal;
+    setSaving(true);
+    try {
+      if (kind === 'edit' && row.immunization?.id) {
+        await updateImmunization(row.immunization.id, activeChild.id, facility, givenDate, activeChild.date_of_birth);
+      } else {
+        await markAsGiven(row.schedule.id, activeChild.id, facility, givenDate, activeChild.date_of_birth);
+      }
+      dispatch({ type: 'CLOSE' });
+      showSuccess(row.schedule.vaccine_name);
+      showToast('Vaccine recorded successfully!', 'success');
+    } catch (err: any) {
+      showToast(err.message ?? 'Could not save record.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }, [modal, activeChild, markAsGiven, updateImmunization, showSuccess, showToast]);
+
   const handleUnmark = useCallback(async () => {
     if (modal.kind !== 'unmark') return;
     if (!activeChild) return;
-
-    // FIX (warning): same stale-closure guard as handleMarkGiven
     const { row } = modal;
-
     setSaving(true);
     try {
       if (row.immunization?.id) {
-        await unmarkImmunization(
-          row.immunization.id,
-          activeChild.id,
-          activeChild.date_of_birth,
-        );
+        await unmarkImmunization(row.immunization.id, activeChild.id, activeChild.date_of_birth);
       }
       dispatch({ type: 'CLOSE' });
       showToast('Record removed.', 'info');
@@ -595,122 +622,18 @@ export default function VaccinesScreen() {
     }
   }, [modal, activeChild, unmarkImmunization, showToast]);
 
-  // ── Row renderer ─────────────────────────────────────────────────────────
-  const renderRow = useCallback(({ item: row }: { item: VaccineRow }) => {
-    const cfg = STATUS_CONFIG[row.status];
-    return (
-      <View style={styles.card}>
-        {/* Left accent bar */}
-        <View style={[styles.cardAccent, { backgroundColor: cfg.color }]} />
+  // ── FlatList renderItem — uses VaccineCard, no inline closures ───────────
+  const renderItem = useCallback(({ item }: { item: VaccineRow }) => (
+    <VaccineCard
+      row={item}
+      onOpenMark={handleOpenMark}
+      onOpenEdit={handleOpenEdit}
+      onOpenUnmark={handleOpenUnmark}
+      onMarkMissed={handleMarkMissed}
+    />
+  ), [handleOpenMark, handleOpenEdit, handleOpenUnmark, handleMarkMissed]);
 
-        <View style={styles.cardBody}>
-          {/* Top row: name + dose badge | status badge */}
-          <View style={styles.cardTop}>
-            <View style={styles.cardTitleRow}>
-              <Text style={styles.vaccineName} numberOfLines={1}>
-                {row.schedule.vaccine_name}
-              </Text>
-              {row.schedule.dose_number > 0 && (
-                <View style={styles.doseBadge}>
-                  <Text style={styles.doseText}>Dose {row.schedule.dose_number}</Text>
-                </View>
-              )}
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-              <Ionicons name={cfg.icon} size={11} color={cfg.color} />
-              <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-            </View>
-          </View>
-
-          {/* Subtitle: diseases covered */}
-          <Text style={styles.diseases} numberOfLines={1}>
-            {row.schedule.diseases_covered}
-          </Text>
-
-          {/* Date */}
-          {row.dueDate && (
-            <View style={styles.metaRow}>
-              <Ionicons name="calendar-outline" size={11} color={COLORS.textMuted} />
-              <Text style={styles.metaText}>
-                {row.status === 'given'
-                  ? `Given: ${formatDate(row.immunization?.given_date)}`
-                  : `Due: ${formatDate(row.dueDate)}`}
-              </Text>
-            </View>
-          )}
-
-          {/* Facility */}
-          {row.immunization?.facility ? (
-            <View style={styles.metaRow}>
-              <Ionicons name="location-outline" size={11} color={COLORS.textMuted} />
-              <Text style={styles.metaText} numberOfLines={1}>{row.immunization.facility}</Text>
-            </View>
-          ) : null}
-
-          {/* Divider */}
-          <View style={styles.cardDivider} />
-
-          {/* Actions */}
-          <View style={styles.cardActions}>
-            {row.status === 'given' && (
-              <>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => dispatch({ type: 'OPEN_EDIT', row })}
-                >
-                  <Ionicons name="pencil-outline" size={13} color={COLORS.primary} />
-                  <Text style={[styles.actionText, { color: COLORS.primary }]}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => dispatch({ type: 'OPEN_UNMARK', row })}
-                >
-                  <Ionicons name="arrow-undo-outline" size={13} color={COLORS.textSecondary} />
-                  <Text style={[styles.actionText, { color: COLORS.textSecondary }]}>Unmark</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {(row.status === 'due' || row.status === 'upcoming') && (
-              <>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnPrimary]}
-                  onPress={() => dispatch({ type: 'OPEN_MARK', row })}
-                >
-                  <Ionicons name="checkmark" size={13} color={COLORS.white} />
-                  <Text style={[styles.actionText, { color: COLORS.white }]}>Mark Given</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => handleMarkMissed(row)}
-                >
-                  <Ionicons name="close-outline" size={13} color={COLORS.missed} />
-                  <Text style={[styles.actionText, { color: COLORS.missed }]}>Miss</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {row.status === 'missed' && (
-              <>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnPrimary]}
-                  onPress={() => dispatch({ type: 'OPEN_MARK', row })}
-                >
-                  <Ionicons name="checkmark" size={13} color={COLORS.white} />
-                  <Text style={[styles.actionText, { color: COLORS.white }]}>Record Now</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => dispatch({ type: 'OPEN_UNMARK', row })}
-                >
-                  <Ionicons name="arrow-undo-outline" size={13} color={COLORS.textSecondary} />
-                  <Text style={[styles.actionText, { color: COLORS.textSecondary }]}>Unmark</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
-      </View>
-    );
-  }, [handleMarkMissed]);
+  const keyExtractor = useCallback((item: VaccineRow) => item.schedule.id, []);
 
   // ── No child ─────────────────────────────────────────────────────────────
   if (!activeChild) {
@@ -733,7 +656,7 @@ export default function VaccinesScreen() {
   return (
     <View style={styles.screen}>
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={HEADER.decorCircle1} />
         <View style={HEADER.decorCircle2} />
@@ -750,18 +673,8 @@ export default function VaccinesScreen() {
               <Text style={styles.headerSub}>{activeChild.full_name}</Text>
             </View>
           </View>
-
-          <TouchableOpacity
-            style={styles.headerRefresh}
-            onPress={handleRefresh}
-            disabled={refreshing}
-          >
-            <Ionicons
-              name="refresh"
-              size={16}
-              color={COLORS.white}
-              style={refreshing ? { opacity: 0.4 } : undefined}
-            />
+          <TouchableOpacity style={styles.headerRefresh} onPress={handleRefresh} disabled={refreshing}>
+            <Ionicons name="refresh" size={16} color={COLORS.white} style={refreshing ? { opacity: 0.4 } : undefined} />
           </TouchableOpacity>
         </View>
 
@@ -775,12 +688,7 @@ export default function VaccinesScreen() {
             { label: 'Upcoming', value: counts.upcoming, icon: 'calendar-outline' as const },
           ].map(chip => (
             <View key={chip.label} style={styles.summaryChip}>
-              <Ionicons
-                name={chip.icon}
-                size={13}
-                color={SUMMARY_ACCENT[chip.label]}
-                style={styles.summaryChipIcon}
-              />
+              <Ionicons name={chip.icon} size={13} color={SUMMARY_ACCENT[chip.label]} style={styles.summaryChipIcon} />
               <Text style={styles.summaryValue}>{chip.value}</Text>
               <Text style={styles.summaryLabel}>{chip.label}</Text>
             </View>
@@ -799,10 +707,7 @@ export default function VaccinesScreen() {
                 style={[styles.filterTab, active && styles.filterTabActive]}
                 onPress={() => setFilter(tab.key)}
               >
-                <Text
-                  style={[styles.filterTabText, active && styles.filterTabTextActive]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.filterTabText, active && styles.filterTabTextActive]} numberOfLines={1}>
                   {tab.label}
                 </Text>
               </TouchableOpacity>
@@ -812,8 +717,6 @@ export default function VaccinesScreen() {
       </View>
 
       {/* ── Error banner ────────────────────────────────────────────────── */}
-      {/* FIX (warning): show a dismissible error banner when load() fails,
-          rather than silently showing an empty list. */}
       {loadError && (
         <View style={styles.errorBanner}>
           <Ionicons name="warning-outline" size={15} color={COLORS.missed} />
@@ -831,22 +734,17 @@ export default function VaccinesScreen() {
           <Text style={styles.loadingText}>Loading schedule…</Text>
         </View>
       ) : filter !== 'all' ? (
-        /* ── Filtered view: flat list (unchanged behaviour) ── */
+        /* Filtered flat list */
         <FlatList
           data={filtered}
-          keyExtractor={item => item.schedule.id}
-          renderItem={renderRow}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
           initialNumToRender={10}
           maxToRenderPerBatch={8}
           windowSize={5}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.primary}
-              colors={[COLORS.primary]}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -859,16 +757,11 @@ export default function VaccinesScreen() {
           }
         />
       ) : (
-        /* ── Default view: grouped by age milestone ── */
+        /* Grouped milestone view — uses VaccineCard component, not renderRow() call */
         <ScrollView
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.primary}
-              colors={[COLORS.primary]}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />
           }
           showsVerticalScrollIndicator={false}
         >
@@ -876,7 +769,7 @@ export default function VaccinesScreen() {
             const rows = vaccineRows.filter(r => group.matcher(r));
             if (rows.length === 0) return null;
             const hasDueOrMissed = rows.some(r => r.status === 'due' || r.status === 'missed');
-            const isCollapsed = collapsedGroups[group.label] ?? !hasDueOrMissed;
+            const isCollapsed    = collapsedGroups[group.label] ?? !hasDueOrMissed;
             return (
               <View key={group.label} style={styles.milestoneGroup}>
                 <TouchableOpacity
@@ -894,21 +787,24 @@ export default function VaccinesScreen() {
                       {hasDueOrMissed ? ' · action needed' : ''}
                     </Text>
                   </View>
-                  {hasDueOrMissed && (
-                    <View style={styles.milestoneAlertDot} />
-                  )}
-                  <Ionicons
-                    name={isCollapsed ? 'chevron-down' : 'chevron-up'}
-                    size={15}
-                    color={COLORS.textMuted}
-                  />
+                  {hasDueOrMissed && <View style={styles.milestoneAlertDot} />}
+                  <Ionicons name={isCollapsed ? 'chevron-down' : 'chevron-up'} size={15} color={COLORS.textMuted} />
                 </TouchableOpacity>
+
                 {!isCollapsed && (
                   <View style={styles.milestoneBody}>
                     {rows.map(row => (
-                      <View key={row.schedule.id}>
-                        {renderRow({ item: row })}
-                      </View>
+                      // FIX 2: VaccineCard component instead of renderRow({ item: row })
+                      // Each card is now a proper memoized component with a stable key,
+                      // so React can reconcile and skip unchanged cards individually.
+                      <VaccineCard
+                        key={row.schedule.id}
+                        row={row}
+                        onOpenMark={handleOpenMark}
+                        onOpenEdit={handleOpenEdit}
+                        onOpenUnmark={handleOpenUnmark}
+                        onMarkMissed={handleMarkMissed}
+                      />
                     ))}
                   </View>
                 )}
@@ -927,7 +823,18 @@ export default function VaccinesScreen() {
         </ScrollView>
       )}
 
-      {/* ── Mark / Edit modal ─────────────────────────────────────────────── */}
+      {/* ── Mark / Edit modal ────────────────────────────────────────────── */}
+      {/*
+        FIX 1: KeyboardAvoidingView restructured.
+        BEFORE: KAV was nested inside the overlay Pressable which has flex:1 and
+                justifyContent:'flex-end'. KAV had no room to resize — the overlay
+                filled the whole screen and the sheet was pinned to the bottom,
+                so KAV could only push content down into nowhere.
+        AFTER:  KAV is the outermost child of the Modal. The overlay Pressable
+                sits INSIDE KAV as a flex:1 child. When the keyboard appears,
+                KAV shrinks the available height, which in turn moves the
+                flex-end overlay upward — correctly lifting the sheet.
+      */}
       <Modal
         visible={isMarkOrEdit}
         transparent
@@ -935,143 +842,123 @@ export default function VaccinesScreen() {
         onRequestClose={() => dispatch({ type: 'CLOSE' })}
         statusBarTranslucent
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => { Keyboard.dismiss(); dispatch({ type: 'CLOSE' }); }}
+        <KeyboardAvoidingView
+          style={styles.kavFull}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
         >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => { Keyboard.dismiss(); dispatch({ type: 'CLOSE' }); }}
           >
-            <Pressable
-              style={styles.modalSheet}
-              onPress={e => e.stopPropagation()}
-            >
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              {modal.kind === 'edit' ? 'Edit Record' : 'Record Vaccine'}
-            </Text>
+            <Pressable style={styles.modalSheet} onPress={e => e.stopPropagation()}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>
+                {modal.kind === 'edit' ? 'Edit Record' : 'Record Vaccine'}
+              </Text>
 
-            {isMarkOrEdit && (
-              <View style={styles.modalSubRow}>
-                <View style={[
-                  styles.modalSubBadge,
-                  { backgroundColor: STATUS_CONFIG[modal.row.status].bg },
-                ]}>
-                  <Ionicons
-                    name={STATUS_CONFIG[modal.row.status].icon}
-                    size={12}
-                    color={STATUS_CONFIG[modal.row.status].color}
-                  />
-                  <Text style={[styles.modalSubText, { color: STATUS_CONFIG[modal.row.status].color }]}>
-                    {modal.row.schedule.vaccine_name}
-                    {modal.row.schedule.dose_number ? ` · Dose ${modal.row.schedule.dose_number}` : ''}
-                  </Text>
+              {isMarkOrEdit && (
+                <View style={styles.modalSubRow}>
+                  <View style={[styles.modalSubBadge, { backgroundColor: STATUS_CONFIG[modal.row.status].bg }]}>
+                    <Ionicons name={STATUS_CONFIG[modal.row.status].icon} size={12} color={STATUS_CONFIG[modal.row.status].color} />
+                    <Text style={[styles.modalSubText, { color: STATUS_CONFIG[modal.row.status].color }]}>
+                      {modal.row.schedule.vaccine_name}
+                      {modal.row.schedule.dose_number ? ` · Dose ${modal.row.schedule.dose_number}` : ''}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            )}
-
-            <ScrollView
-              ref={modalScrollRef}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              contentContainerStyle={styles.modalBodyContent}
-            >
-              <Text style={styles.inputLabel}>Date Given</Text>
-              <TouchableOpacity
-                style={[
-                  styles.dateInput,
-                  isMarkOrEdit && modal.showPicker && styles.dateInputActive,
-                ]}
-                onPress={() => { Keyboard.dismiss(); dispatch({ type: 'TOGGLE_PICKER' }); }}
-              >
-                <Ionicons name="calendar-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.dateInputText}>
-                  {isMarkOrEdit ? formatDate(modal.givenDate) : ''}
-                </Text>
-                <Ionicons
-                  name={isMarkOrEdit && modal.showPicker ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color={COLORS.textMuted}
-                />
-              </TouchableOpacity>
-
-              {isMarkOrEdit && modal.showPicker && (
-                <ChipDatePicker
-                  value={modal.givenDate}
-                  maxDate={new Date()}
-                  onConfirm={(d) => dispatch({ type: 'SET_DATE', date: d })}
-                  onCancel={() => dispatch({ type: 'HIDE_PICKER' })}
-                />
               )}
 
-              <Text style={[styles.inputLabel, { marginTop: 16 }]}>Health Facility</Text>
-              <TextInput
-                ref={facilityInputRef}
-                style={styles.input}
-                placeholder="e.g. Kenyatta National Hospital"
-                placeholderTextColor={COLORS.textMuted}
-                value={isMarkOrEdit ? modal.facility : ''}
-                onChangeText={v => dispatch({ type: 'SET_FACILITY', value: v })}
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-                blurOnSubmit
-                onFocus={() => {
-                  setTimeout(() => {
-                    modalScrollRef.current?.scrollToEnd({ animated: true });
-                  }, 100);
-                }}
-              />
-
-            </ScrollView>
-
-            {/* Pinned footer — lives outside ScrollView so keyboard never covers it */}
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => dispatch({ type: 'CLOSE' })}
+              <ScrollView
+                ref={modalScrollRef}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={styles.modalBodyContent}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalConfirm, saving && styles.modalBtnDisabled]}
-                onPress={handleMarkGiven}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator size="small" color={COLORS.white} />
-                  : (
-                    <>
-                      <Ionicons
-                        name={modal.kind === 'edit' ? 'save-outline' : 'checkmark-circle-outline'}
-                        size={16}
-                        color={COLORS.white}
-                      />
-                      <Text style={styles.modalConfirmText}>
-                        {modal.kind === 'edit' ? 'Save Changes' : 'Confirm'}
-                      </Text>
-                    </>
-                  )}
-              </TouchableOpacity>
-            </View>
+                <Text style={styles.inputLabel}>Date Given</Text>
+                <TouchableOpacity
+                  style={[styles.dateInput, isMarkOrEdit && modal.showPicker && styles.dateInputActive]}
+                  onPress={() => { Keyboard.dismiss(); dispatch({ type: 'TOGGLE_PICKER' }); }}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.dateInputText}>
+                    {isMarkOrEdit ? formatDate(modal.givenDate) : ''}
+                  </Text>
+                  <Ionicons
+                    name={isMarkOrEdit && modal.showPicker ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color={COLORS.textMuted}
+                  />
+                </TouchableOpacity>
 
+                {isMarkOrEdit && modal.showPicker && (
+                  <ChipDatePicker
+                    value={modal.givenDate}
+                    maxDate={new Date()}
+                    onConfirm={d => dispatch({ type: 'SET_DATE', date: d })}
+                    onCancel={() => dispatch({ type: 'HIDE_PICKER' })}
+                  />
+                )}
+
+                <Text style={[styles.inputLabel, { marginTop: 16 }]}>Health Facility</Text>
+                <TextInput
+                  ref={facilityInputRef}
+                  style={styles.input}
+                  placeholder="e.g. Kenyatta National Hospital"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={isMarkOrEdit ? modal.facility : ''}
+                  onChangeText={v => dispatch({ type: 'SET_FACILITY', value: v })}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  blurOnSubmit
+                  onFocus={() => {
+                    setTimeout(() => {
+                      modalScrollRef.current?.scrollToEnd({ animated: true });
+                    }, 300);
+                  }}
+                />
+              </ScrollView>
+
+              {/* Pinned footer — inside KAV so it rises with the sheet */}
+              <View style={styles.modalFooter}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => dispatch({ type: 'CLOSE' })}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalConfirm, saving && styles.modalBtnDisabled]}
+                  onPress={handleMarkGiven}
+                  disabled={saving}
+                >
+                  {saving
+                    ? <ActivityIndicator size="small" color={COLORS.white} />
+                    : (
+                      <>
+                        <Ionicons
+                          name={modal.kind === 'edit' ? 'save-outline' : 'checkmark-circle-outline'}
+                          size={16}
+                          color={COLORS.white}
+                        />
+                        <Text style={styles.modalConfirmText}>
+                          {modal.kind === 'edit' ? 'Save Changes' : 'Confirm'}
+                        </Text>
+                      </>
+                    )}
+                </TouchableOpacity>
+              </View>
             </Pressable>
-          </KeyboardAvoidingView>
-        </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Unmark confirmation modal ─────────────────────────────────────── */}
+      {/* ── Unmark confirmation modal ────────────────────────────────────── */}
       <Modal
         visible={modal.kind === 'unmark'}
         transparent
         animationType="fade"
         onRequestClose={() => dispatch({ type: 'CLOSE' })}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => dispatch({ type: 'CLOSE' })}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => dispatch({ type: 'CLOSE' })}>
           <Pressable style={styles.unmarkSheet} onPress={e => e.stopPropagation()}>
             <View style={styles.modalHandle} />
             <View style={styles.unmarkIconWrap}>
@@ -1087,11 +974,7 @@ export default function VaccinesScreen() {
               and restore it to its scheduled state.
             </Text>
             <View style={styles.modalFooter}>
-              {/* FIX (refinement): Cancel is never disabled here either. */}
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => dispatch({ type: 'CLOSE' })}
-              >
+              <TouchableOpacity style={styles.modalCancel} onPress={() => dispatch({ type: 'CLOSE' })}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1108,7 +991,6 @@ export default function VaccinesScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── Toast notification ──────────────────────────────────────────── */}
       <Toast
         visible={toast.visible}
         message={toast.message}
@@ -1116,12 +998,10 @@ export default function VaccinesScreen() {
         onHide={() => setToast(prev => ({ ...prev, visible: false }))}
       />
 
-      {/* ── Success overlay ──────────────────────────────────────────────── */}
       <VaccineSuccessOverlay
         visible={successOverlay.visible}
         vaccineName={successOverlay.vaccineName}
       />
-
     </View>
   );
 }
@@ -1129,13 +1009,13 @@ export default function VaccinesScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: COLORS.background },
 
-  screen: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  // FIX 1: new style — KAV needs flex:1 to fill the modal so the overlay
+  // inside it can use flex:1 and justifyContent:'flex-end' correctly.
+  kavFull: { flex: 1 },
 
-  // ── Header ──────────────────────────────────────────────────────────────────
+  // Header
   header: {
     backgroundColor: COLORS.primary,
     paddingTop: HEADER.paddingTop,
@@ -1147,543 +1027,160 @@ const styles = StyleSheet.create({
     zIndex: 2,
     ...HEADER.shadow,
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-  headerTitleBlock: {
-    gap: 4,
-    flex: 1,
-    paddingRight: 12,
-  },
-  eyebrowRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 2,
-  },
+  headerTop:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  headerTitleBlock: { gap: 4, flex: 1, paddingRight: 12 },
+  eyebrowRow:       { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },
   eyebrowText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.70)',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+    fontFamily: FONTS.semibold, fontSize: 10, color: 'rgba(255,255,255,0.70)',
+    letterSpacing: 1.4, textTransform: 'uppercase',
   },
-  headerTitle: {
-    fontFamily: FONTS.extrabold,
-    fontSize: 30,
-    color: COLORS.white,
-    letterSpacing: -0.6,
-    lineHeight: 34,
-  },
+  headerTitle: { fontFamily: FONTS.extrabold, fontSize: 30, color: COLORS.white, letterSpacing: -0.6, lineHeight: 34 },
   childPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginTop: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.14)', alignSelf: 'flex-start',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginTop: 4,
   },
-  headerSub: {
-    fontFamily: FONTS.semibold,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.88)',
-    letterSpacing: 0.2,
-  },
+  headerSub: { fontFamily: FONTS.semibold, fontSize: 12, color: 'rgba(255,255,255,0.88)', letterSpacing: 0.2 },
   headerRefresh: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 38, height: 38, borderRadius: 19,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center', justifyContent: 'center', marginTop: 2,
   },
-  headerDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    marginBottom: 14,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  headerDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: 14 },
+  summaryRow:    { flexDirection: 'row', gap: 8 },
   summaryChip: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    gap: 2,
+    flex: 1, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 18,
+    paddingVertical: 12, paddingHorizontal: 4, alignItems: 'center', gap: 2,
   },
-  summaryChipIcon: {
-    marginBottom: 1,
-  },
-  summaryValue: {
-    fontFamily: FONTS.bold,
-    fontSize: 22,
-    color: COLORS.textPrimary,
-    lineHeight: 24,
-  },
-  summaryLabel: {
-    fontFamily: FONTS.regular,
-    fontSize: 8,
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+  summaryChipIcon: { marginBottom: 1 },
+  summaryValue:    { fontFamily: FONTS.bold, fontSize: 22, color: COLORS.textPrimary, lineHeight: 24 },
+  summaryLabel:    { fontFamily: FONTS.regular, fontSize: 8, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // ── Filter bar ──────────────────────────────────────────────────────────────
-  filterBarWrapper: {
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    zIndex: 1,
-  },
-  filterBarContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
-  },
+  // Filter bar
+  filterBarWrapper: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border, zIndex: 1 },
+  filterBarContent: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
   filterTab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 7, borderRadius: 999, borderWidth: 1,
+    borderColor: COLORS.border, backgroundColor: COLORS.white,
   },
-  filterTabActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  filterTabText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  filterTabTextActive: {
-    color: COLORS.white,
-  },
+  filterTabActive:     { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterTabText:       { fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.textSecondary },
+  filterTabTextActive: { color: COLORS.white },
 
-  // ── Error banner ─────────────────────────────────────────────────────────────
-  // FIX (warning): new styles for the error/retry banner
+  // Error banner
   errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.missedLight,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  errorBannerText: {
-    flex: 1,
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: COLORS.missed,
-  },
-  errorRetryBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.missed,
-  },
-  errorRetryText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 12,
-    color: COLORS.missed,
-  },
+  errorBannerText: { flex: 1, fontFamily: FONTS.regular, fontSize: 13, color: COLORS.missed },
+  errorRetryBtn:   { paddingHorizontal: 12, paddingVertical: 5, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.missed },
+  errorRetryText:  { fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.missed },
 
-  listContent: {
-    padding: 16,
-    paddingBottom: 0,
-    gap: 10,
-  },
-  milestoneGroup: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  milestoneHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 10,
-  },
-  milestoneIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  milestoneTitleBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  milestoneLabel: {
-    fontFamily: FONTS.semibold,
-    fontSize: 14,
-    color: COLORS.textPrimary,
-  },
-  milestoneMeta: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: COLORS.textMuted,
-  },
-  milestoneAlertDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.missed,
-    marginRight: 2,
-  },
-  milestoneBody: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    padding: 10,
-    gap: 8,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
+  listContent: { padding: 16, paddingBottom: 0, gap: 10 },
 
-  card: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardAccent: {
-    width: 3.5,
-    flexShrink: 0,
-  },
-  cardBody: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingTop: 13,
-    paddingBottom: 12,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginBottom: 4,
-  },
-  cardTitleRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginRight: 4,
-  },
-  vaccineName: {
-    fontFamily: FONTS.semibold,
-    fontSize: 15,
-    color: COLORS.textPrimary,
-    flexShrink: 1,
-  },
-  doseBadge: {
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: RADIUS.full,
-  },
-  doseText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 10,
-    color: COLORS.primary,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: RADIUS.full,
-    flexShrink: 0,
-  },
-  statusText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 11,
-  },
-  diseases: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 2,
-  },
-  metaText: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.textMuted,
-    flex: 1,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 10,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
+  // Milestone groups
+  milestoneGroup:      { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 10 },
+  milestoneHeader:     { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
+  milestoneIconWrap:   { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  milestoneTitleBlock: { flex: 1, gap: 2 },
+  milestoneLabel:      { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.textPrimary },
+  milestoneMeta:       { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.textMuted },
+  milestoneAlertDot:   { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.missed, marginRight: 2 },
+  milestoneBody:       { borderTopWidth: 1, borderTopColor: COLORS.border, padding: 10, gap: 8 },
+
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText:      { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.textMuted },
+
+  // Card
+  card: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: RADIUS.lg, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
+  cardAccent: { width: 3.5, flexShrink: 0 },
+  cardBody:   { flex: 1, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 12 },
+  cardTop:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 4 },
+  cardTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginRight: 4 },
+  vaccineName:  { fontFamily: FONTS.semibold, fontSize: 15, color: COLORS.textPrimary, flexShrink: 1 },
+  doseBadge:    { backgroundColor: COLORS.primaryLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: RADIUS.full },
+  doseText:     { fontFamily: FONTS.semibold, fontSize: 10, color: COLORS.primary },
+  statusBadge:  { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full, flexShrink: 0 },
+  statusText:   { fontFamily: FONTS.semibold, fontSize: 11 },
+  diseases:     { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.textSecondary, marginBottom: 6 },
+  metaRow:      { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },
+  metaText:     { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.textMuted, flex: 1 },
+  cardDivider:  { height: 1, backgroundColor: COLORS.border, marginVertical: 10 },
+  cardActions:  { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white,
   },
-  actionBtnPrimary: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  actionText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 12,
-  },
+  actionBtnPrimary: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  actionText:       { fontFamily: FONTS.semibold, fontSize: 12 },
 
-  emptyFull: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 40,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
-    gap: 10,
-  },
-  emptyIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontFamily: FONTS.semibold,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  emptyFull:    { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
+  emptyState:   { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingVertical: 60, gap: 10 },
+  emptyIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle:    { fontFamily: FONTS.semibold, fontSize: 16, color: COLORS.textPrimary, textAlign: 'center' },
+  emptySubtitle: { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
+  // Modal
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    maxHeight: '92%',
-    width: '100%',
-    flexShrink: 1,
+    backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 20, paddingTop: 12, maxHeight: '92%', width: '100%', flexShrink: 1,
   },
   unmarkSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 28,
-    gap: 12,
+    backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 20, paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 28, gap: 12,
   },
-  modalHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: COLORS.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 10,
-  },
-  modalTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 17,
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  modalSubRow: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  modalSubBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: RADIUS.full,
-  },
-  modalSubText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 13,
-  },
-  // FIX (nit): modalBody (flex: 1) removed — it was defined but never applied
-  // to any component, so it was dead code.
-  modalBodyContent: {
-    paddingBottom: 12,
-  },
+  modalHandle:    { width: 36, height: 4, backgroundColor: COLORS.border, borderRadius: 2, alignSelf: 'center', marginBottom: 10 },
+  modalTitle:     { fontFamily: FONTS.bold, fontSize: 17, color: COLORS.textPrimary, textAlign: 'center', marginBottom: 4 },
+  modalSubRow:    { alignItems: 'center', marginBottom: 8 },
+  modalSubBadge:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.full },
+  modalSubText:   { fontFamily: FONTS.semibold, fontSize: 13 },
+  modalBodyContent: { paddingBottom: 12 },
   modalFooter: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingTop: 12,
+    flexDirection: 'row', gap: 10, paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.white,
   },
-  inputLabel: {
-    fontFamily: FONTS.semibold,
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-  },
+  inputLabel:  { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.textSecondary, marginBottom: 6 },
   input: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontFamily: FONTS.regular,
-    fontSize: 15,
-    color: COLORS.textPrimary,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontFamily: FONTS.regular, fontSize: 15, color: COLORS.textPrimary,
     backgroundColor: COLORS.surface,
   },
   dateInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md,
+    paddingHorizontal: 14, paddingVertical: 12, backgroundColor: COLORS.surface,
   },
-  dateInputActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.white,
-  },
-  dateInputText: {
-    fontFamily: FONTS.regular,
-    fontSize: 15,
-    color: COLORS.textPrimary,
-    flex: 1,
-  },
+  dateInputActive: { borderColor: COLORS.primary, backgroundColor: COLORS.white },
+  dateInputText:   { fontFamily: FONTS.regular, fontSize: 15, color: COLORS.textPrimary, flex: 1 },
   modalCancel: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, paddingVertical: 13, borderRadius: RADIUS.md,
+    borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center',
   },
-  modalCancelText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 15,
-    color: COLORS.textSecondary,
-  },
+  modalCancelText:  { fontFamily: FONTS.semibold, fontSize: 15, color: COLORS.textSecondary },
   modalConfirm: {
-    flex: 2,
-    paddingVertical: 13,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
+    flex: 2, paddingVertical: 13, borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', gap: 6,
   },
   modalDanger: {
-    flex: 2,
-    paddingVertical: 13,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.missed,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 2, paddingVertical: 13, borderRadius: RADIUS.md,
+    backgroundColor: COLORS.missed, alignItems: 'center', justifyContent: 'center',
   },
-  modalBtnDisabled: {
-    opacity: 0.5,
-  },
-  modalConfirmText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 15,
-    color: COLORS.white,
-  },
+  modalBtnDisabled: { opacity: 0.5 },
+  modalConfirmText: { fontFamily: FONTS.semibold, fontSize: 15, color: COLORS.white },
   unmarkIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center', alignSelf: 'center',
   },
-  unmarkBody: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  unmarkBody: { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
 });

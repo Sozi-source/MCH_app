@@ -1,4 +1,4 @@
-﻿{
+{
     "expo":  {
                  "name":  "ZuriHealth",
                  "slug":  "mamaTOTO",
@@ -13,7 +13,8 @@
                                                       "backgroundColor":  "#E6F4FE"
                                                   },
                                  "predictiveBackGestureEnabled":  false,
-                                 "package":  "com.sozi.ZuriHealth"
+                                 "package":  "com.sozi.ZuriHealth",
+                                 "softwareKeyboardLayoutMode":  "resize"
                              },
                  "web":  {
                              "output":  "static",

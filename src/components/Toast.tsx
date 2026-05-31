@@ -1,15 +1,9 @@
-﻿// src/components/Toast.tsx
+// src/components/Toast.tsx
+// Rewritten to use React Native built-in Animated (no react-native-reanimated)
 import { COLORS, FONTS, RADIUS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect } from 'react';
-import { StyleSheet, Text } from 'react-native';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, Text } from 'react-native';
 
 export type ToastType = 'success' | 'error' | 'info';
 
@@ -30,25 +24,26 @@ const TOAST_CONFIG: Record<ToastType, {
 };
 
 export function Toast({ visible, message, type = 'success', onHide, duration = 3000 }: ToastProps) {
-  const translateY = useSharedValue(-20);
-  const opacity    = useSharedValue(0);
+  const translateY = useRef(new Animated.Value(-20)).current;
+  const opacity    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
-      opacity.value    = withTiming(1, { duration: 200 });
+      Animated.parallel([
+        Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+
       const t = setTimeout(() => {
-        opacity.value    = withTiming(0, { duration: 200 });
-        translateY.value = withTiming(-20, { duration: 200 }, () => runOnJS(onHide)());
+        Animated.parallel([
+          Animated.timing(opacity,    { toValue: 0,   duration: 200, useNativeDriver: true }),
+          Animated.timing(translateY, { toValue: -20, duration: 200, useNativeDriver: true }),
+        ]).start(() => onHide());
       }, duration);
+
       return () => clearTimeout(t);
     }
   }, [visible]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    opacity:   opacity.value,
-    transform: [{ translateY: translateY.value }],
-  }));
 
   if (!visible) return null;
 
@@ -58,7 +53,7 @@ export function Toast({ visible, message, type = 'success', onHide, duration = 3
     <Animated.View style={[
       styles.container,
       { backgroundColor: cfg.bg, borderColor: cfg.border },
-      animStyle,
+      { opacity, transform: [{ translateY }] },
     ]}>
       <Ionicons name={cfg.icon} size={18} color={cfg.color} />
       <Text style={[styles.message, { color: cfg.color }]} numberOfLines={2}>

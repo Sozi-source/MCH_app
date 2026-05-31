@@ -1,0 +1,1347 @@
+﻿/**
+ * src/app/(tabs)/nutrition.tsx
+ * ZuriHealth â€” Nutrition Screen v3 (i18n: English + Kiswahili)
+ */
+
+import React, {
+  useState, useEffect, useRef, useCallback,
+  Component, type ReactNode,
+} from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, TextInput,
+  ActivityIndicator, StyleSheet, Dimensions, Modal,
+  KeyboardAvoidingView, Platform, Animated, RefreshControl,
+  Pressable, Linking,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS, FONTS, RADIUS } from '@/lib/theme';
+import { useChildStore } from '@/store/childStore';
+import { useFeedingStage } from '@/hooks/useNutrition';
+import { askGroq } from '@/lib/zscore';
+import { useMealPlan, MealSlot, MealSlotType } from '@/hooks/useMealPlan';
+import {
+  useMealPlanStore,
+  EnrichedFood,
+  deriveConditions,
+  textureLabel,
+} from '@/store/nutritionMealPlanStore';
+import { useT } from '@/hooks/useT';
+
+const { width: W } = Dimensions.get('window');
+const MIN_SEND_INTERVAL_MS = 2000;
+const MAX_CHAT_MESSAGES = 60;
+
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+interface ChatMsg { role: 'assistant' | 'user'; content: string }
+
+// â”€â”€â”€ Slot type â†’ i18n key â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const SLOT_KEY: Record<MealSlotType, string> = {
+  'Breakfast':         'slot_breakfast',
+  'Morning snack':     'slot_morning_snack',
+  'Lunch':             'slot_lunch',
+  'Afternoon snack':   'slot_afternoon_snack',
+  'Dinner':            'slot_dinner',
+};
+
+const NUTRIENT_KEY: Record<string, string> = {
+  'Iron':      'nutrient_iron',
+  'Vitamin A': 'nutrient_vitamin_a',
+  'Vitamin C': 'nutrient_vitamin_c',
+  'Energy':    'nutrient_energy',
+  'Omega-3':   'nutrient_omega3',
+  'Zinc':      'nutrient_zinc',
+  'Calcium':   'nutrient_calcium',
+  'Protein':   'nutrient_protein',
+  'B12':       'nutrient_b12',
+};
+
+// â”€â”€â”€ Error Boundary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+class NutritionErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) return (
+      <View style={eb.container}>
+        <Ionicons name="warning-outline" size={36} color={COLORS.missed} />
+        <Text style={eb.title}>Something went wrong</Text>
+        <Text style={eb.body}>Please close and reopen this screen.</Text>
+        <TouchableOpacity style={eb.btn} onPress={() => this.setState({ hasError: false })}>
+          <Text style={eb.btnText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+    return this.props.children;
+  }
+}
+const eb = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  title: { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.textPrimary, textAlign: 'center' },
+  body: { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  btn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.full, backgroundColor: COLORS.primary },
+  btnText: { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.white },
+});
+
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function getAgeMonths(dob: string): number {
+  const b = new Date(dob);
+  const n = new Date();
+  let m = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
+  if (n.getDate() < b.getDate()) m--;
+  return Math.max(0, m);
+}
+
+function energyTargetLabel(age: number): string {
+  if (age < 9)  return '200 kcal/day';
+  if (age < 12) return '300 kcal/day';
+  if (age < 24) return '550 kcal/day';
+  return '~1,000 kcal/day';
+}
+
+function wazStatusLabel(waz: number | null, t: (k: string) => string): string {
+  if (waz == null) return 'No growth data';
+  if (waz < -3) return t('condition_sam');
+  if (waz < -2) return t('condition_mam');
+  if (waz < -1) return 'Mildly underweight';
+  if (waz <= 1) return 'Normal weight-for-age';
+  return 'Above average weight';
+}
+
+function wazBadge(waz: number | null) {
+  if (waz == null)
+    return { label: 'No data', bg: COLORS.surface, color: COLORS.textMuted, icon: 'help-circle-outline' as const };
+  if (waz < -3)
+    return { label: 'SAM â€” refer', bg: COLORS.missedLight, color: COLORS.missed, icon: 'alert-circle' as const };
+  if (waz < -2)
+    return { label: 'MAM', bg: COLORS.dueLight, color: COLORS.due, icon: 'warning' as const };
+  if (waz < -1)
+    return { label: 'Mild risk', bg: COLORS.upcomingLight, color: COLORS.upcoming, icon: 'information-circle' as const };
+  return { label: 'Normal', bg: COLORS.givenLight, color: COLORS.given, icon: 'checkmark-circle' as const };
+}
+
+function tagStyle(tag: string): { bg: string; color: string } {
+  const lower = tag.toLowerCase();
+  if (lower.includes('iron') || lower.includes('zinc') || lower.includes('vitamin c'))
+    return { bg: COLORS.givenLight, color: COLORS.given };
+  if (lower.includes('vitamin a') || lower.includes('energy') || lower.includes('omega'))
+    return { bg: COLORS.upcomingLight, color: COLORS.upcoming };
+  if (lower.includes('protein') || lower.includes('b12'))
+    return { bg: COLORS.dueLight, color: COLORS.due };
+  if (lower.includes('calcium') || lower.includes('fibre'))
+    return { bg: COLORS.primaryLight, color: COLORS.primary };
+  return { bg: COLORS.surface, color: COLORS.textSecondary };
+}
+
+function pickEmoji(foodName: string, whoGroup: string, foodId?: string): string {
+  const ID_EMOJI: Record<string, string> = {
+    OV042: '🌿', OV003: '🌿', OV005: '🥬', GR043: '🌿', OV004: '🥬',
+    OV033: '🥬', OV032: '🌿', OV038: '🌿', OV040: '🌿', OV039: '🌿',
+    OV031: '🌿', OV001: '🥬', OV002: '🥬', OV037: '🥬', OV008: '🥬',
+    OV029: '🍆', OV019: '🌱', OV010: '🥑', OV044: '🌸', OV022: '🫚',
+    OV030: '🥒', OV020: '🥦', OV009: '🥬', OV021: '🥦', OV024: '🥬',
+    OV014: '🥒', OV011: '🍆', OV015: '🧄', OV016: '🫚', OV013: '🫑',
+    OV028: '🥔', OV018: '🧅', OV025: '🥗', OV041: '🌿', OV026: '🍄',
+    OV035: '🌿', OV007: '🧅', OV043: '🌼', VA001: '🎃', OV023: '🌱',
+    VA003: '🫑', OV034: '🌱', OV017: '🧅', OV006: '🍅', OV045: '🍉',
+    OV027: '🍄', OV036: '🫑', VA005: '🌽', OV012: '🥒', VA002: '🥕',
+    VA004: '🎃', OF011: '🍑', OF010: '🍎', VF003: '🍑', OF001: '🍌',
+    OF015: '🍇', OF018: '🥥', OF019: '🥥', OF014: '🍊', OF020: '🍇',
+    OF006: '🍈', OF016: '🍈', OF017: '🍈', OF003: '🍋', OF013: '🍋',
+    OF022: '🍑', VF002: '🥭', OF021: '🫐', OF002: '🍊', OF004: '🍋',
+    VF001: '🍈', OF023: '🍑', OF008: '🍍', OF024: '🍑', OF025: '🍈',
+    OF009: '🍓', OF007: '🟤', OF005: '🍉', OF012: '🌿', VF004: '🍋',
+    GR011: '🍠', GR038: '🌾', GR033: '🍞', GR030: '🥣', GR008: '🍚',
+    GR013: '🌾', GR015: '🫓', GR034: '🍠', GR003: '🥣', PR001: '🌾',
+    PR002: '🌾', GR025: '🍲', GR042: '🫓', GR044: '🍜', GR014: '🥔',
+    GR001: '🌽', GR002: '🌽', GR023: '🌽', GR018: '🍩', GR045: '🍞',
+    GR047: '🍌', GR046: '🍚', GR026: '🥔', GR029: '🥣', GR005: '🥣',
+    GR036: '🌾', GR020: '🍌', GR024: '🍿', GR041: '🌽', GR031: '🌾',
+    GR032: '🌾', GR027: '🍚', GR004: '🌾', GR035: '🌾', GR022: '🍝',
+    GR009: '🍠', GR010: '🍠', GR039: '🍠', GR028: '🌾', GR017: '🥣',
+    BV003: '🥣', GR006: '🌽', GR040: '🥣', GR037: '🌾', GR007: '🍚',
+    GR016: '🍞', GR021: '🍞', GR019: '🍠', GR012: '🍠',
+    LG023: '🫘', LG013: '🫘', LG011: '🥜', LG014: '🫘', LG001: '🫘',
+    LG005: '🫘', LG018: '🫘', LG003: '🫘', LG008: '🥜', LG007: '🥜',
+    LG012: '🫘', LG022: '🫘', LG002: '🫘', LG016: '🥜', LG006: '🫘',
+    LG004: '🫘', LG025: '🫘', LG017: '🫘', LG021: '🌰', LG015: '🥜',
+    LG009: '🌰', LG010: '🫘', LG024: '🫘', LG019: '🌱', LG020: '🌻',
+    MF017: '🫀', MF004: '🥩', MF007: '🫀', MF034: '🌭', MF016: '🥩',
+    MF028: '🐟', MF008: '🥚', MF019: '🍗', MF006: '🫀', MF005: '🍗',
+    MF035: '🥫', MF025: '🦀', MF013: '🦆', MF029: '🥚', MF027: '🐟',
+    MF009: '🥩', MF022: '🐟', MF010: '🐟', MF015: '🥩', MF003: '🐟',
+    MF026: '🐙', MF033: '🐟', PR004: '🐟', MF001: '🐟', MF012: '🥩',
+    MF024: '🦐', MF030: '🥚', MF011: '🐇', MF023: '🐟', MF020: '🥫',
+    MF032: '🐟', MF002: '🐟', MF018: '🥩', MF021: '🥫', MF014: '🦃',
+    MF031: '🥩',
+    DA005: '🥛', DA009: '🧀', DA010: '🥛', DA001: '🥛', DA011: '🥛',
+    DA002: '🥛', DA004: '🥛', DA008: '🧀', DA012: '🥛', DA003: '🥛',
+    DA007: '🥛', DA006: '🥛', BV007: '🥥',
+    FO006: '🧈', FO002: '🫙', FO003: '🧈', FO008: '🫙', FO007: '🧈',
+    FO010: '🫙', FO005: '🫙', FO009: '🫙', FO004: '🫙', FO001: '🫙',
+    BV002: '💧', BV004: '☕', BV005: '🥤', BV009: '🌺', BV006: '🧃',
+    BV001: '🍵', BV008: '🫙',
+    SU002: '🟤', SU003: '🍯', SU005: '🟤', SU004: '🟤', SU006: '🌿',
+    SU001: '🍬',
+    CS011: '🌿', CS008: '🌶️', CS004: '🌿', CS010: '🌿', CS009: '🌿',
+    CS006: '🌿', CS007: '🌿', CS013: '🌿', CS014: '🌿', CS005: '🌿',
+    CS002: '🌶️', CS019: '🌿', CS012: '🌿', CS020: '🌿', CS017: '🧂',
+    CS018: '🫙', CS001: '🧂', CS016: '🍅', PR010: '🍅', CS003: '🌿',
+    CS015: '🫙',
+    PR008: '🍪', PR007: '🥔', PR006: '🥣', PR005: '🍼', PR003: '🏥',
+    PR009: '🥤',
+  };
+
+  if (foodId && ID_EMOJI[foodId]) return ID_EMOJI[foodId];
+
+  const n = foodName.toLowerCase();
+  if (n.includes('liver'))                                      return '🫀';
+  if (n.includes('kidney') || n.includes('tripe') || n.includes('gizzard') || n.includes('matumbo')) return '🥩';
+  if (n.includes('omena') || n.includes('dagaa'))               return '🐟';
+  if (n.includes('tilapia') || n.includes('sato'))              return '🐟';
+  if (n.includes('sardine') || n.includes('tuna') || n.includes('salmon') || n.includes('mackerel')) return '🐟';
+  if (n.includes('fish'))                                       return '🐟';
+  if (n.includes('prawn') || n.includes('shrimp') || n.includes('kamba')) return '🦐';
+  if (n.includes('crab') || n.includes('kaa'))                  return '🦀';
+  if (n.includes('octopus') || n.includes('pweza'))             return '🐙';
+  if (n.includes('chicken'))                                    return '🍗';
+  if (n.includes('duck'))                                       return '🦆';
+  if (n.includes('turkey'))                                     return '🦃';
+  if (n.includes('rabbit'))                                     return '🐇';
+  if (n.includes('egg'))                                        return '🥚';
+  if (n.includes('beef') || n.includes('goat') || n.includes('lamb') || n.includes('pork') || n.includes('meat')) return '🥩';
+  if (n.includes('sausage'))                                    return '🌭';
+  if (n.includes('ugali'))                                      return '🌽';
+  if (n.includes('uji') || n.includes('porridge') || n.includes('wimbi') || n.includes('millet')) return '🥣';
+  if (n.includes('chapati'))                                    return '🫓';
+  if (n.includes('mandazi') || n.includes('mahamri'))           return '🍩';
+  if (n.includes('bread'))                                      return '🍞';
+  if (n.includes('rice'))                                       return '🍚';
+  if (n.includes('pasta') || n.includes('noodle') || n.includes('spaghetti') || n.includes('tambi')) return '🍝';
+  if (n.includes('maize') || n.includes('corn') || n.includes('posho')) return '🌽';
+  if (n.includes('sorghum') || n.includes('mtama'))             return '🌾';
+  if (n.includes('oat'))                                        return '🥣';
+  if (n.includes('cassava') || n.includes('muhogo'))            return '🍠';
+  if (n.includes('sweet potato') || n.includes('viazi vitamu')) return '🍠';
+  if (n.includes('potato') || n.includes('viazi'))              return '🥔';
+  if (n.includes('yam') || n.includes('arrowroot') || n.includes('nduma') || n.includes('cocoyam')) return '🍠';
+  if (n.includes('plantain') || n.includes('matoke'))           return '🍌';
+  if (n.includes('githeri') || n.includes('mukimo'))            return '🍲';
+  if (n.includes('injera'))                                     return '🫓';
+  if (n.includes('quinoa') || n.includes('teff') || n.includes('barley') || n.includes('wheat')) return '🌾';
+  if (n.includes('popcorn'))                                    return '🍿';
+  if (n.includes('cereal') || n.includes('weetabix'))           return '🥣';
+  if (n.includes('bean') || n.includes('lentil') || n.includes('maharagwe') || n.includes('dengu')) return '🫘';
+  if (n.includes('pea') || n.includes('mbaazi') || n.includes('chickpea') || n.includes('cowpea'))  return '🫘';
+  if (n.includes('groundnut') || n.includes('peanut') || n.includes('karanga')) return '🥜';
+  if (n.includes('cashew') || n.includes('macadamia') || n.includes('nut'))     return '🥜';
+  if (n.includes('sesame') || n.includes('simsim') || n.includes('sunflower seed') || n.includes('pumpkin seed')) return '🌰';
+  if (n.includes('soybean') || n.includes('soya'))              return '🫘';
+  if (n.includes('milk') || n.includes('maziwa') || n.includes('mala') || n.includes('mtindi') || n.includes('yoghurt') || n.includes('mursik')) return '🥛';
+  if (n.includes('cheese') || n.includes('chizi'))              return '🧀';
+  if (n.includes('butter') || n.includes('siagi') || n.includes('ghee') || n.includes('margarine')) return '🧈';
+  if (n.includes('oil') || n.includes('mafuta'))                return '🫙';
+  if (n.includes('avocado') || n.includes('parachichi'))        return '🥑';
+  if (n.includes('tomato') || n.includes('nyanya'))             return '🍅';
+  if (n.includes('carrot') || n.includes('karoti'))             return '🥕';
+  if (n.includes('pumpkin') || n.includes('butternut') || n.includes('squash') || n.includes('boga')) return '🎃';
+  if (n.includes('spinach') || n.includes('mchicha') || n.includes('kale') || n.includes('sukuma')) return '🥬';
+  if (n.includes('amaranth') || n.includes('terere'))           return '🥬';
+  if (n.includes('moringa'))                                    return '🌿';
+  if (n.includes('cabbage') || n.includes('kabichi'))           return '🥬';
+  if (n.includes('broccoli'))                                   return '🥦';
+  if (n.includes('cauliflower'))                                return '🥦';
+  if (n.includes('mushroom') || n.includes('uyoga'))            return '🍄';
+  if (n.includes('eggplant') || n.includes('brinjal') || n.includes('biringanya')) return '🍆';
+  if (n.includes('okra') || n.includes('bamia'))                return '🌿';
+  if (n.includes('cucumber') || n.includes('tango') || n.includes('zucchini')) return '🥒';
+  if (n.includes('pepper') || n.includes('pilipili') || n.includes('hoho')) return '🫑';
+  if (n.includes('onion') || n.includes('kitunguu') || n.includes('garlic') || n.includes('leek')) return '🧅';
+  if (n.includes('beetroot') || n.includes('biiti'))            return '🫚';
+  if (n.includes('lettuce') || n.includes('saladi'))            return '🥗';
+  if (n.includes('mango') || n.includes('embe'))                return '🥭';
+  if (n.includes('banana') || n.includes('ndizi'))              return '🍌';
+  if (n.includes('orange') || n.includes('chungwa'))            return '🍊';
+  if (n.includes('lemon') || n.includes('lime') || n.includes('ndimu')) return '🍋';
+  if (n.includes('passion'))                                    return '🍋';
+  if (n.includes('papaya') || n.includes('pawpaw') || n.includes('papai')) return '🍈';
+  if (n.includes('pineapple') || n.includes('nanasi'))          return '🍍';
+  if (n.includes('coconut') || n.includes('nazi') || n.includes('dafu')) return '🥥';
+  if (n.includes('watermelon') || n.includes('tikiti'))         return '🍉';
+  if (n.includes('guava') || n.includes('mapera'))              return '🍈';
+  if (n.includes('jackfruit') || n.includes('fenesi'))          return '🍈';
+  if (n.includes('strawberry'))                                 return '🍓';
+  if (n.includes('grape') || n.includes('zabibu') || n.includes('gooseberry') || n.includes('mulberry')) return '🍇';
+  if (n.includes('apple') || n.includes('tofaa'))               return '🍎';
+  if (n.includes('peach') || n.includes('apricot') || n.includes('plum') || n.includes('loquat')) return '🍑';
+  if (n.includes('soursop') || n.includes('mstafeli'))          return '🍈';
+  if (n.includes('tamarind') || n.includes('ukwaju'))           return '🟤';
+  if (n.includes('honey') || n.includes('asali'))               return '🍯';
+  if (n.includes('sugar') || n.includes('sukari'))              return '🍬';
+  if (n.includes('molasses') || n.includes('jaggery'))          return '🟤';
+  if (n.includes('sugarcane') || n.includes('miwa'))            return '🌿';
+  if (n.includes('water') || n.includes('maji'))                return '💧';
+  if (n.includes('tea') || n.includes('chai'))                  return '🍵';
+  if (n.includes('coffee') || n.includes('kahawa'))             return '☕';
+  if (n.includes('juice') || n.includes('juisi'))               return '🥤';
+  if (n.includes('soda'))                                       return '🥤';
+  if (n.includes('salt') || n.includes('chumvi'))               return '🧂';
+  if (n.includes('royco') || n.includes('seasoning'))           return '🧂';
+  if (n.includes('chilli') || n.includes('pilipili manga'))     return '🌶️';
+  if (n.includes('spice') || n.includes('curry') || n.includes('masala') || n.includes('herb') || n.includes('coriander') || n.includes('dania') || n.includes('rosemary') || n.includes('cinnamon') || n.includes('clove') || n.includes('cardamom') || n.includes('turmeric') || n.includes('ginger')) return '🌿';
+  if (n.includes('biscuit') || n.includes('cookie') || n.includes('biskuti')) return '🍪';
+  if (n.includes('crisp') || n.includes('chip') || n.includes('vibanzi'))     return '🥔';
+  if (n.includes('infant') || n.includes('formula') || n.includes('cerelac')) return '🍼';
+  if (n.includes('rutf') || n.includes('plumpy'))               return '🏥';
+
+  const g = whoGroup.toLowerCase();
+  if (g.includes('fish') || g.includes('marine') || g.includes('freshwater')) return '🐟';
+  if (g.includes('shellfish') || g.includes('seafood'))          return '🦐';
+  if (g.includes('poultry'))                                     return '🍗';
+  if (g.includes('egg'))                                         return '🥚';
+  if (g.includes('meat') || g.includes('offal') || g.includes('game')) return '🥩';
+  if (g.includes('legume') || g.includes('bean') || g.includes('pea') || g.includes('lentil') || g.includes('soy')) return '🫘';
+  if (g.includes('nut') || g.includes('seed'))                   return '🥜';
+  if (g.includes('dairy') || g.includes('milk') || g.includes('cheese')) return '🥛';
+  if (g.includes('grain') || g.includes('cereal') || g.includes('millet') || g.includes('sorghum') || g.includes('rice') || g.includes('wheat') || g.includes('maize')) return '🌾';
+  if (g.includes('root') || g.includes('starchy') || g.includes('tuber')) return '🍠';
+  if (g.includes('dark leafy') || g.includes('leafy') || g.includes('greens')) return '🥬';
+  if (g.includes('vegetable') || g.includes('brassica'))         return '🥦';
+  if (g.includes('fruit'))                                       return '🍎';
+  if (g.includes('oil') || g.includes('fat'))                   return '🫙';
+  if (g.includes('spice') || g.includes('herb') || g.includes('condiment') || g.includes('seasoning')) return '🌿';
+  if (g.includes('sugar') || g.includes('sweetener'))           return '🍬';
+  if (g.includes('beverage') || g.includes('water') || g.includes('juice')) return '💧';
+
+  return '🍽️';
+}
+
+const MEAL_TIMES: Record<MealSlotType, string> = {
+  'Breakfast':         '7:00 AM',
+  'Morning snack':     '10:00 AM',
+  'Lunch':             '12:30 PM',
+  'Afternoon snack':   '3:00 PM',
+  'Dinner':            '6:00 PM',
+};
+
+// â”€â”€â”€ Referral Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+interface ReferralCardProps {
+  severity: string;
+  reason: string;
+  childName: string;
+  waz: number | null;
+  haz: number | null;
+  whz: number | null;
+}
+
+const ReferralCard: React.FC<ReferralCardProps> = ({
+  severity, reason, childName, waz, haz, whz,
+}) => {
+  const t = useT();
+  const isCritical = severity === 'critical';
+  const bg     = isCritical ? COLORS.missedLight : COLORS.dueLight;
+  const border = isCritical ? COLORS.missed      : COLORS.due;
+
+  return (
+    <View style={[rc.card, { backgroundColor: bg, borderColor: border + '55' }]}>
+      <View style={rc.header}>
+        <Ionicons name={isCritical ? 'alert-circle' : 'warning'} size={20} color={border} />
+        <Text style={[rc.title, { color: border }]}>
+          {isCritical ? 'ðŸš¨  ' : 'âš ï¸  '}{t('referral_title')}
+        </Text>
+      </View>
+      <Text style={[rc.reason, { color: border }]}>{reason}</Text>
+      <View style={rc.scores}>
+        {waz != null && (
+          <View style={[rc.chip, { borderColor: border + '44' }]}>
+            <Text style={[rc.chipLabel, { color: border }]}>WAZ</Text>
+            <Text style={[rc.chipVal, { color: border }]}>{waz.toFixed(1)}</Text>
+          </View>
+        )}
+        {haz != null && (
+          <View style={[rc.chip, { borderColor: border + '44' }]}>
+            <Text style={[rc.chipLabel, { color: border }]}>HAZ</Text>
+            <Text style={[rc.chipVal, { color: border }]}>{haz.toFixed(1)}</Text>
+          </View>
+        )}
+        {whz != null && (
+          <View style={[rc.chip, { borderColor: border + '44' }]}>
+            <Text style={[rc.chipLabel, { color: border }]}>WHZ</Text>
+            <Text style={[rc.chipVal, { color: border }]}>{whz.toFixed(1)}</Text>
+          </View>
+        )}
+      </View>
+      {isCritical && (
+        <View style={rc.rutfBox}>
+          <Ionicons name="medkit-outline" size={14} color={border} />
+          <Text style={[rc.rutfText, { color: border }]}>
+            {childName} may be eligible for RUTF (Ready-to-Use Therapeutic Food).
+            Visit your nearest MCH clinic immediately for SAM assessment.
+          </Text>
+        </View>
+      )}
+      <TouchableOpacity
+        style={[rc.btn, { backgroundColor: border }]}
+        onPress={() => Linking.openURL('tel:0800723253')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="call-outline" size={14} color={COLORS.white} />
+        <Text style={rc.btnText}>
+          {isCritical ? 'Call Kenya Health Hotline' : 'Book MCH Appointment'}
+        </Text>
+      </TouchableOpacity>
+      <Text style={[rc.source, { color: border + 'AA' }]}>
+        WHO/UNICEF SAM Protocol 2023 Â· Kenya MoH IMAM Guidelines
+      </Text>
+    </View>
+  );
+};
+
+const rc = StyleSheet.create({
+  card:      { borderRadius: RADIUS.lg, borderWidth: 1.5, padding: 16, marginBottom: 14, gap: 10 },
+  header:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title:     { fontFamily: FONTS.bold, fontSize: 14, flex: 1 },
+  reason:    { fontFamily: FONTS.regular, fontSize: 13, lineHeight: 19 },
+  scores:    { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  chip:      { borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', gap: 1 },
+  chipLabel: { fontFamily: FONTS.regular, fontSize: 9, letterSpacing: 0.5 },
+  chipVal:   { fontFamily: FONTS.bold, fontSize: 16 },
+  rutfBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: RADIUS.md, padding: 10 },
+  rutfText:  { fontFamily: FONTS.regular, fontSize: 12, flex: 1, lineHeight: 17 },
+  btn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: RADIUS.lg },
+  btnText:   { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.white },
+  source:    { fontFamily: FONTS.regular, fontSize: 10, textAlign: 'center' },
+});
+
+// â”€â”€â”€ Meal Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+interface MealCardProps {
+  slot: MealSlot;
+  index: number;
+  onSwap: (slot: MealSlot) => void;
+}
+
+const MealCard = React.memo(({ slot, index, onSwap }: MealCardProps) => {
+  const t = useT();
+  const fade  = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(16)).current;
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade,  { toValue: 1, duration: 300, delay: index * 60, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 300, delay: index * 60, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const emoji       = pickEmoji(slot.primaryFood.food_name, slot.primaryFood.who_group, slot.primaryFood.food_id);
+  const accentColor = slot.isSnack ? COLORS.primary : COLORS.given;
+  const badgeBg     = slot.isSnack ? COLORS.upcomingLight : COLORS.givenLight;
+  const badgeColor  = slot.isSnack ? COLORS.upcoming      : COLORS.given;
+
+  return (
+    <Animated.View style={{ opacity: fade, transform: [{ translateY: slide }] }}>
+      <View style={mc.card}>
+        <View style={[mc.accent, { backgroundColor: accentColor }]} />
+        <View style={mc.body}>
+
+          {/* Collapsed header — tap to expand */}
+          <TouchableOpacity style={mc.header} onPress={() => setExpanded(e => !e)} activeOpacity={0.75}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingRight: 8 }}>
+              <Text style={mc.emoji}>{emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={mc.mealType}>{t(SLOT_KEY[slot.type])}</Text>
+                <Text style={mc.mealName} numberOfLines={2}>{slot.mealName}</Text>
+              </View>
+            </View>
+            <View style={[mc.badge, { backgroundColor: badgeBg }]}>
+              <Ionicons
+                name={slot.isSnack ? 'cafe-outline' : 'restaurant-outline'}
+                size={11}
+                color={badgeColor}
+              />
+              <Text style={[mc.badgeText, { color: badgeColor }]}>
+                {slot.isSnack ? t('snack_label') : t('meal_label')}
+              </Text>
+            </View>
+          </View>
+
+          {/* Time + max serving */}
+          <View style={mc.metaRow}>
+            <Ionicons name="time-outline" size={12} color={COLORS.textMuted} />
+            <Text style={mc.metaText}>{MEAL_TIMES[slot.type]}</Text>
+            {slot.primaryFood.max_serving_g != null && (
+              <>
+                <View style={mc.dot} />
+                <Ionicons name="scale-outline" size={12} color={COLORS.due} />
+                <Text style={[mc.metaText, { color: COLORS.due }]}>
+                  Max {slot.primaryFood.max_serving_g}g
+                </Text>
+              </>
+            )}
+          </View>
+
+          {/* Nutrient tags â€” translated */}
+          <View style={mc.tags}>
+            {slot.nutrients.map(tag => {
+              const ts = tagStyle(tag);
+              const label = t(NUTRIENT_KEY[tag] ?? tag);
+              return (
+                <View key={tag} style={[mc.tag, { backgroundColor: ts.bg }]}>
+                  <Text style={[mc.tagText, { color: ts.color }]}>{label}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Foods breakdown */}
+          <View style={mc.foodsRow}>
+            {[slot.primaryFood, slot.secondFood, slot.thirdFood]
+              .filter(Boolean)
+              .map(food => (
+                <View key={food!.food_id} style={mc.foodChip}>
+                  <Text style={mc.foodEmoji}>{pickEmoji(food!.food_name, food!.who_group, food!.food_id)}</Text>
+                  <Text style={mc.foodName} numberOfLines={1}>
+                    {food!.local_name ?? food!.food_name}
+                  </Text>
+                  {food!.energy_kcal != null && (
+                    <Text style={mc.foodKcal}>{Math.round(food!.energy_kcal)} kcal</Text>
+                  )}
+                </View>
+              ))}
+          </View>
+
+          {/* Synergy note */}
+          {!!slot.synergyNote && (
+            <View style={mc.synergyBox}>
+              <Ionicons name="flash-outline" size={11} color={COLORS.primary} />
+              <Text style={mc.synergyText}>
+                <Text style={{ fontFamily: FONTS.semibold }}>{t('synergy_note_label')}: </Text>
+                {slot.synergyNote}
+              </Text>
+            </View>
+          )}
+
+          <View style={mc.divider} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={mc.swapBtn} onPress={() => onSwap(slot)} activeOpacity={0.7}>
+              <Ionicons name="swap-horizontal-outline" size={14} color={COLORS.primary} />
+              <Text style={mc.swapText}>Swap food</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </View>
+    </Animated.View>
+  );
+});
+MealCard.displayName = 'MealCard';
+
+const mc = StyleSheet.create({
+  card:           { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: 10, overflow: 'hidden' },
+  accent:         { width: 4 },
+  body:           { flex: 1, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 11 },
+  header:         { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  emoji:          { fontSize: 28, lineHeight: 32, marginTop: 2 },
+  mealType:       { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 },
+  mealName:       { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.textPrimary, lineHeight: 19 },
+  foodSummary:    { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  badge:          { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full, flexShrink: 0 },
+  badgeText:      { fontFamily: FONTS.semibold, fontSize: 11 },
+  expandedContent:{ marginTop: 12 },
+  metaRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  metaText:       { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.textMuted },
+  dot:            { width: 3, height: 3, borderRadius: 2, backgroundColor: COLORS.border },
+  tags:           { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 8 },
+  tag:            { paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full },
+  tagText:        { fontFamily: FONTS.semibold, fontSize: 11 },
+  foodsRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  foodChip:       { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.surface, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 8, paddingVertical: 4, maxWidth: (W - 80) / 2 },
+  foodEmoji:      { fontSize: 13 },
+  foodName:       { fontFamily: FONTS.semibold, fontSize: 11, color: COLORS.textSecondary, flex: 1 },
+  foodKcal:       { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.textMuted },
+  synergyBox:     { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: COLORS.primaryLight, borderRadius: RADIUS.md, paddingHorizontal: 9, paddingVertical: 5, marginBottom: 10 },
+  synergyText:    { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.primary, flex: 1, lineHeight: 15 },
+  divider:        { height: 1, backgroundColor: COLORS.border, marginBottom: 10 },
+  swapBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
+  swapText:        { fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.primary, paddingHorizontal: 5 },
+  foodSummary:     { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  expandedContent: { marginTop: 10 },
+});
+
+// â”€â”€â”€ Swap Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+interface SwapModalProps {
+  visible: boolean;
+  slot: MealSlot | null;
+  onClose: () => void;
+  onSelect: (slot: MealSlot, newPrimary: EnrichedFood) => void;
+  poolFoods: EnrichedFood[];
+}
+
+const SwapModal: React.FC<SwapModalProps> = ({
+  visible, slot, onClose, onSelect, poolFoods,
+}) => {
+  const t = useT();
+  const [selIdx, setSelIdx] = useState(0);
+  const insets = useSafeAreaInsets();
+
+  const alternatives = slot
+    ? poolFoods
+        .filter(f =>
+          f.who_group === slot.primaryFood.who_group &&
+          f.food_id   !== slot.primaryFood.food_id &&
+          !['unga', 'flour', 'meal', 'raw'].some(w =>
+            (f.food_name ?? '').toLowerCase().includes(w),
+          ),
+        )
+        .filter((f, i, arr) =>
+          arr.findIndex(x =>
+            (x.local_name ?? x.food_name) === (f.local_name ?? f.food_name),
+          ) === i,
+        )
+        .slice(0, 8)
+    : [];
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sm.overlay} onPress={onClose}>
+        <Pressable
+          style={[sm.sheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={e => e.stopPropagation()}
+        >
+          <View style={sm.handle} />
+          <Text style={sm.title}>
+            {slot ? `${t(SLOT_KEY[slot.type])}` : 'Swap food'}
+          </Text>
+          <Text style={sm.sub}>
+            Age & condition-safe alternatives from your food database
+          </Text>
+
+          {alternatives.length === 0 ? (
+            <View style={sm.empty}>
+              <Ionicons name="leaf-outline" size={28} color={COLORS.textMuted} />
+              <Text style={sm.emptyText}>
+                No alternatives found in this food group for the current age and conditions.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+              <View style={sm.grid}>
+                {alternatives.map((food, i) => (
+                  <TouchableOpacity
+                    key={food.food_id}
+                    style={[sm.card, selIdx === i && sm.cardSel]}
+                    onPress={() => setSelIdx(i)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={sm.emoji}>{pickEmoji(food.food_name, food.who_group, food.food_id)}</Text>
+                    <Text style={sm.name} numberOfLines={2}>
+                      {food.local_name ?? food.food_name}
+                    </Text>
+                    <View style={sm.nutRow}>
+                      {food.iron_mg    ? <Text style={sm.nut}>ðŸ©¸ {t('nutrient_iron')}</Text>    : null}
+                      {food.vit_a_mcg  ? <Text style={sm.nut}>ðŸŒŸ {t('nutrient_vitamin_a')}</Text> : null}
+                      {food.protein_g  ? <Text style={sm.nut}>ðŸ’ª {t('nutrient_protein')}</Text>  : null}
+                      {food.vit_c_mg   ? <Text style={sm.nut}>ðŸŠ {t('nutrient_vitamin_c')}</Text> : null}
+                      {food.energy_kcal ? <Text style={sm.nut}>{Math.round(food.energy_kcal)}kcal</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          )}
+
+          <View style={sm.footer}>
+            <TouchableOpacity style={sm.cancelBtn} onPress={onClose}>
+              <Text style={sm.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            {alternatives.length > 0 && (
+              <TouchableOpacity
+                style={sm.confirmBtn}
+                onPress={() => {
+                  if (slot && alternatives[selIdx]) onSelect(slot, alternatives[selIdx]);
+                  onClose();
+                }}
+              >
+                <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.white} />
+                <Text style={sm.confirmText}>Use this food</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+const sm = StyleSheet.create({
+  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet:      { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12 },
+  handle:     { width: 36, height: 4, backgroundColor: COLORS.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  title:      { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.textPrimary, marginBottom: 4 },
+  sub:        { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.textMuted, marginBottom: 16, lineHeight: 17 },
+  grid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  card:       { width: (W - 56) / 2, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: 12, alignItems: 'center', gap: 4 },
+  cardSel:    { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
+  emoji:      { fontSize: 26, marginBottom: 4 },
+  name:       { fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.textPrimary, textAlign: 'center' },
+  nutRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 3, justifyContent: 'center' },
+  nut:        { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.textMuted },
+  empty:      { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  emptyText:  { fontFamily: FONTS.regular, fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 18 },
+  footer:     { flexDirection: 'row', gap: 10, paddingTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: 16 },
+  cancelBtn:  { flex: 1, paddingVertical: 13, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  cancelText: { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.textSecondary },
+  confirmBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 13, borderRadius: RADIUS.lg, backgroundColor: COLORS.primary },
+  confirmText:{ fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.white },
+});
+
+// â”€â”€â”€ Chat Bubble â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const ChatBubble = ({ msg }: { msg: ChatMsg }) => (
+  <View style={[cb.bubble, msg.role === 'user' ? cb.user : cb.zuri]}>
+    <Text style={[cb.text, msg.role === 'user' ? cb.textUser : cb.textZuri]}>{msg.content}</Text>
+  </View>
+);
+const cb = StyleSheet.create({
+  bubble:   { maxWidth: '85%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  zuri:     { alignSelf: 'flex-start', backgroundColor: COLORS.primaryLight, borderBottomLeftRadius: 4 },
+  user:     { alignSelf: 'flex-end', backgroundColor: COLORS.primary, borderBottomRightRadius: 4 },
+  text:     { fontFamily: FONTS.regular, fontSize: 13, lineHeight: 19 },
+  textZuri: { color: COLORS.primary },
+  textUser: { color: COLORS.white },
+});
+
+// â”€â”€â”€ Plan Summary Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+interface PlanSummaryProps {
+  plan: import('@/hooks/useMealPlan').GeneratedMealPlan;
+}
+
+const PlanSummaryBanner: React.FC<PlanSummaryProps> = ({ plan }) => {
+  const t = useT();
+
+  const totalKcal = plan.slots
+    .flatMap(s => [s.primaryFood, s.secondFood, s.thirdFood])
+    .filter(Boolean)
+    .reduce((sum, f) => sum + (f!.energy_kcal ?? 0), 0);
+
+  const uniqueGroups = new Set(
+    plan.slots
+      .flatMap(s => [s.primaryFood, s.secondFood, s.thirdFood])
+      .filter(Boolean)
+      .map(f => f!.who_group),
+  ).size;
+
+  return (
+    <View style={ps.card}>
+      <View style={ps.row}>
+        <View style={ps.stat}>
+          <Text style={ps.val}>{totalKcal > 0 ? `~${Math.round(totalKcal)}` : 'â€”'}</Text>
+          <Text style={ps.label}>kcal total</Text>
+        </View>
+        <View style={ps.sep} />
+        <View style={ps.stat}>
+          <Text style={ps.val}>{uniqueGroups}/8</Text>
+          <Text style={ps.label}>food groups</Text>
+        </View>
+        <View style={ps.sep} />
+        <View style={ps.stat}>
+          <Text style={ps.val}>{plan.textureLabel.split(' ')[0]}</Text>
+          <Text style={[ps.label]}>{t('texture')}</Text>
+        </View>
+      </View>
+      <Text style={ps.target}>{t('energy_target')}: {plan.energyTarget}</Text>
+    </View>
+  );
+};
+
+const ps = StyleSheet.create({
+  card:  { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 14 },
+  row:   { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  stat:  { flex: 1, alignItems: 'center' },
+  val:   { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.textPrimary },
+  label: { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  sep:   { width: 1, height: 32, backgroundColor: COLORS.border, marginHorizontal: 8 },
+  target:{ fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.primary, textAlign: 'center' },
+});
+
+// â”€â”€â”€ Screen Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+interface ScreenHeaderProps {
+  childName: string;
+  ageMonths: number;
+  waz: number | null;
+  isEbf: boolean;
+  insets: any;
+  onRefresh?: () => void;
+  loading?: boolean;
+  tabs: { key: string; label: string }[];
+  activeTab: string;
+  onTabChange: (t: string) => void;
+}
+
+const ScreenHeader: React.FC<ScreenHeaderProps> = ({
+  childName, ageMonths, waz, isEbf, insets,
+  onRefresh, loading, tabs, activeTab, onTabChange,
+}) => {
+  const t    = useT();
+  const badge = wazBadge(waz);
+
+  const stats = isEbf
+    ? [
+        { icon: 'heart-outline' as const,     value: '8â€“12Ã—', label: 'FEEDS/DAY' },
+        { icon: 'calendar-outline' as const,   value: `${ageMonths}mo`, label: 'AGE' },
+        { icon: 'time-outline' as const,       value: '6mo',  label: 'START CF' },
+        { icon: 'water-outline' as const,      value: 'EBF',  label: 'FEEDING' },
+      ]
+    : [
+        { icon: 'restaurant-outline' as const, value: '3+2',  label: 'MEALS/DAY' },
+        { icon: 'stats-chart-outline' as const, value: waz != null ? waz.toFixed(1) : 'â€”', label: 'WAZ' },
+        { icon: 'calendar-outline' as const,   value: `${ageMonths}mo`, label: 'AGE' },
+        {
+          icon: 'leaf-outline' as const,
+          value: ageMonths < 9 ? 'Mash' : ageMonths < 12 ? 'Mince' : 'Family',
+          label: 'TEXTURE',
+        },
+      ];
+
+  return (
+    <>
+      <View style={[sh.header, { paddingTop: insets.top + 14 }]}>
+        <View style={sh.circle1} />
+        <View style={sh.circle2} />
+        <View style={sh.top}>
+          <View style={{ flex: 1 }}>
+            <Text style={sh.eyebrow}>
+              {isEbf ? 'BREASTFEEDING GUIDE' : 'FEEDING GUIDE'}
+            </Text>
+            <Text style={sh.title}>{t('meal_plan_title')}</Text>
+            <View style={sh.childPill}>
+              <Ionicons name="person-circle-outline" size={13} color="rgba(255,255,255,0.85)" />
+              <Text style={sh.childPillText}>{childName.toUpperCase()}</Text>
+            </View>
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 8 }}>
+            <View style={[sh.badge, { backgroundColor: badge.bg }]}>
+              <Ionicons name={badge.icon} size={13} color={badge.color} />
+              <Text style={[sh.badgeText, { color: badge.color }]}>{badge.label}</Text>
+            </View>
+            {onRefresh && (
+              <TouchableOpacity
+                style={sh.refreshBtn}
+                onPress={onRefresh}
+                disabled={loading}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={15}
+                  color={COLORS.white}
+                  style={loading ? { opacity: 0.4 } : undefined}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        <View style={sh.divider} />
+        <View style={sh.statRow}>
+          {stats.map((st, i) => (
+            <View key={i} style={sh.statChip}>
+              <Ionicons name={st.icon} size={15} color={COLORS.textMuted} style={{ marginBottom: 2 }} />
+              <Text style={sh.statVal}>{st.value}</Text>
+              <Text style={sh.statLabel}>{st.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={sh.tabBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={sh.tabInner}
+        >
+          {tabs.map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[sh.tab, activeTab === tab.key && sh.tabActive]}
+              onPress={() => onTabChange(tab.key)}
+            >
+              <Text style={[sh.tabText, activeTab === tab.key && sh.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </>
+  );
+};
+
+const sh = StyleSheet.create({
+  header:       { backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 8, zIndex: 2 },
+  circle1:      { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40 },
+  circle2:      { position: 'absolute', width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -30, right: 60 },
+  top:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  eyebrow:      { fontFamily: FONTS.semibold, fontSize: 10, color: 'rgba(255,255,255,0.65)', letterSpacing: 1.5, marginBottom: 4 },
+  title:        { fontFamily: FONTS.extrabold, fontSize: 32, color: COLORS.white, letterSpacing: -0.5, lineHeight: 36, marginBottom: 8 },
+  childPill:    { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
+  childPillText:{ fontFamily: FONTS.semibold, fontSize: 12, color: 'rgba(255,255,255,0.92)', letterSpacing: 0.3 },
+  badge:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  badgeText:    { fontFamily: FONTS.semibold, fontSize: 11 },
+  refreshBtn:   { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  divider:      { height: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginBottom: 14 },
+  statRow:      { flexDirection: 'row', gap: 8 },
+  statChip:     { flex: 1, backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 12, alignItems: 'center', gap: 1 },
+  statVal:      { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.textPrimary, lineHeight: 22 },
+  statLabel:    { fontFamily: FONTS.regular, fontSize: 8, color: COLORS.textMuted, letterSpacing: 0.5 },
+  tabBar:       { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  tabInner:     { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  tab:          { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border },
+  tabActive:    { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  tabText:      { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.textSecondary },
+  tabTextActive:{ color: COLORS.white },
+});
+
+// â”€â”€â”€ Main Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export default function NutritionScreen() {
+  const t      = useT();
+  const insets = useSafeAreaInsets();
+
+  const activeChild       = useChildStore(s => s.activeChild);
+  const growthRecords     = useChildStore(s => s.growthRecords);
+  const fetchGrowthRecords = useChildStore(s => s.fetchGrowthRecords);
+  const latestGrowth      = growthRecords[0] ?? null;
+
+  const childName = activeChild?.full_name ?? 'Child';
+  const dob       = activeChild?.date_of_birth ?? '';
+  const sex       = (activeChild?.sex ?? 'female') as 'male' | 'female';
+  const sexLabel  = sex === 'male' ? 'boy' : 'girl';
+
+  const ageMonths = dob ? getAgeMonths(dob) : 9;
+  const waz       = latestGrowth?.waz ?? null;
+  const haz       = latestGrowth?.haz ?? null;
+  const whz       = latestGrowth?.whz ?? null;
+  const zscores   = React.useMemo(() => ({ waz, haz, whz }), [waz, haz, whz]);
+
+  useEffect(() => {
+    if (activeChild?.id && growthRecords.length === 0) fetchGrowthRecords(activeChild.id);
+  }, [activeChild?.id]);
+
+  const { data: feedingStage } = useFeedingStage(ageMonths);
+  const isEbf = ageMonths < 6;
+
+  // â”€â”€ DB-driven meal plan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const {
+    plan,
+    isLoading: planLoading,
+    error: planError,
+    isUsingFallback,
+    refresh: refreshPlan,
+  } = useMealPlan({ childName, sex, ageMonths, zscores, enabled: !isEbf });
+
+  const storeFoods    = useMealPlanStore(s => s.foods);
+  const storeGroups   = useMealPlanStore(s => s.foodGroups);
+  const buildFoodPool = useMealPlanStore(s => s.buildFoodPool);
+  const poolFoods: EnrichedFood[] = React.useMemo(() => {
+    if (storeFoods.length === 0) return [];
+    return buildFoodPool(ageMonths, zscores).all;
+  }, [storeFoods, storeGroups, ageMonths, zscores]);
+
+  // â”€â”€ Local swap overrides (inline re-roll, no modal) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const [swappedSlots, setSwappedSlots] = useState<Record<string, EnrichedFood>>({});
+
+  const handleSwap = useCallback((slot: MealSlot) => {
+    const sameGroup = poolFoods.filter(f =>
+      f.who_group === slot.primaryFood.who_group &&
+      f.food_id   !== slot.primaryFood.food_id &&
+      f.food_id   !== (swappedSlots[slot.type]?.food_id ?? ''),
+    );
+    if (sameGroup.length === 0) return;
+    const pick = sameGroup[Math.floor(Math.random() * sameGroup.length)];
+    setSwappedSlots(prev => ({ ...prev, [slot.type]: pick }));
+  }, [poolFoods, swappedSlots]);
+
+  const effectivePlan = React.useMemo(() => {
+    if (!plan) return null;
+    if (Object.keys(swappedSlots).length === 0) return plan;
+    return {
+      ...plan,
+      slots: plan.slots.map(slot => {
+        const override = swappedSlots[slot.type];
+        if (!override) return slot;
+        const parts = [override, slot.secondFood, slot.thirdFood]
+          .filter(Boolean)
+          .map(f => f!.local_name ?? f!.food_name);
+        return {
+          ...slot,
+          primaryFood: override,
+          mealName: parts.length > 1
+            ? `${parts[0]} with ${parts.slice(1).join(' with ')}`
+            : parts[0],
+        };
+      }),
+    };
+  }, [plan, swappedSlots]);
+
+  // â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const [messages, setMessages] = useState<ChatMsg[]>([{
+    role: 'assistant',
+    content: isEbf
+      ? `Habari! I'm Zuri 🌿 ${childName} is ${ageMonths} month${ageMonths !== 1 ? 's' : ''} old â€” breast milk alone is perfect right now. Ask me anything about breastfeeding.`
+      : `Habari! I'm Zuri 🌿 Ask me anything about ${childName}'s feeding. The meal plan above uses only foods confirmed in your database â€” no invented ingredients.`,
+  }]);
+  const [chatInput, setChatInput]   = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const lastSendRef = useRef<number>(0);
+  const chatRef     = useRef<ScrollView>(null);
+
+  // Reset chat history and swaps when switching children
+  useEffect(() => {
+    setMessages([{
+      role: 'assistant',
+      content: isEbf
+        ? `Habari! I'm Zuri 🌿 ${childName} is ${ageMonths} month${ageMonths !== 1 ? 's' : ''} old — breast milk alone is perfect right now. Ask me anything about breastfeeding.`
+        : `Habari! I'm Zuri 🌿 Ask me anything about ${childName}'s feeding. The meal plan above uses only foods confirmed in your database — no invented ingredients.`,
+    }]);
+    setSwappedSlots({});
+  }, [activeChild?.id]);
+
+
+  // â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const cfTabs = [
+    { key: 'plan', label: t('meal_plan_title') },
+    { key: 'rf',   label: t('nutrition_desc') },
+    { key: 'ask',  label: t('tab_chat') },
+  ];
+  const ebfTabs = [
+    { key: 'ask', label: t('tab_chat') },
+  ];
+  const [activeTab, setActiveTab] = useState('plan');
+
+  const buildChatSysPrompt = useCallback(() => {
+    const conds     = plan?.conditions.join(', ') ?? '';
+    const planFoods = effectivePlan?.slots
+      .flatMap(s => [s.primaryFood, s.secondFood, s.thirdFood])
+      .filter(Boolean)
+      .map(f => f!.local_name ?? f!.food_name)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .join(', ') ?? '';
+
+    return `You are Zuri, Kenya MCH nutrition counsellor. Child: ${childName}, ${ageMonths}mo, ${sexLabel}, WAZ ${waz?.toFixed(1) ?? 'â€”'}.${haz != null ? ` HAZ ${haz.toFixed(1)}.` : ''}${whz != null ? ` WHZ ${whz.toFixed(1)}.` : ''}
+Active conditions: ${conds || 'none'}.
+Today's meal plan foods (from Kenya food database): ${planFoods || 'see meal plan tab'}.
+Only reference foods confirmed in the database. Never invent foods.${plan?.requiresReferral ? `\nIMPORTANT: ${plan.referralReason}` : ''}
+Clinical concerns â†’ MCH clinic. SAM (WAZ/WHZ < -3): urgent RUTF referral.
+Answer warmly, 3â€“5 sentences. Sources: WHO IYCF 2023, Kenya MoH MIYCN 2023â€“2028.`;
+  }, [childName, ageMonths, sexLabel, waz, haz, whz, plan, effectivePlan]);
+
+  const sendChat = useCallback(async (text?: string) => {
+    const q = (text ?? chatInput).trim();
+    if (!q || q.length < 3) return;
+    const now = Date.now();
+    if (now - lastSendRef.current < MIN_SEND_INTERVAL_MS) return;
+    lastSendRef.current = now;
+    setChatInput('');
+
+    setMessages(prev => {
+      const next = [...prev, { role: 'user' as const, content: q }];
+      return next.length > MAX_CHAT_MESSAGES ? next.slice(next.length - MAX_CHAT_MESSAGES) : next;
+    });
+
+    setChatLoading(true);
+    const hist = messages
+      .slice(-4)
+      .map(m => `${m.role === 'user' ? 'Parent' : 'Zuri'}: ${m.content}`)
+      .join('\n');
+    try {
+      const reply = await askGroq(
+        hist ? `${hist}\n\nNew question: ${q}` : q,
+        buildChatSysPrompt(),
+        0.4,
+      );
+      setMessages(prev => {
+        const next = [...prev, { role: 'assistant' as const, content: reply }];
+        return next.length > MAX_CHAT_MESSAGES ? next.slice(next.length - MAX_CHAT_MESSAGES) : next;
+      });
+    } catch {
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant' as const, content: 'Sorry, could not connect. Please try again.' },
+      ]);
+    }
+    setChatLoading(false);
+    setTimeout(() => chatRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [chatInput, messages, buildChatSysPrompt]);
+
+  // â”€â”€ No child selected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  if (!activeChild) return (
+    <View style={s.screen}>
+      <View style={[s.simpleHeader, { paddingTop: insets.top + 14 }]}>
+        <Text style={s.simpleHeaderTitle}>{t('meal_plan_title')}</Text>
+      </View>
+      <View style={s.empty}>
+        <View style={s.emptyIcon}>
+          <Ionicons name="person-add-outline" size={32} color={COLORS.primary} />
+        </View>
+        <Text style={s.emptyTitle}>No child selected</Text>
+        <Text style={s.emptySub}>
+          {t('no_children_hint')}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const QUICK_CHIPS = isEbf
+    ? ['How do I know my milk is enough?', 'Baby feeding every hour â€” normal?', 'Sore nipples â€” what to do?', 'Should I give water?']
+    : [`Why these specific foods?`, `Best iron sources for ${ageMonths}mo?`, 'Why avoid tea with meals?', 'How thick should uji be?', 'My child refuses omena â€” alternatives?'];
+
+  return (
+    <NutritionErrorBoundary>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={s.screen}>
+
+          <ScreenHeader
+            childName={childName} ageMonths={ageMonths} waz={waz}
+            isEbf={isEbf} insets={insets}
+            onRefresh={!isEbf ? refreshPlan : undefined}
+            loading={planLoading}
+            tabs={isEbf ? ebfTabs : cfTabs}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
+
+          {/* â”€â”€ Meal Plan Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {!isEbf && activeTab === 'plan' && (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + 80 }]}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={planLoading && !plan}
+                  onRefresh={refreshPlan}
+                  colors={[COLORS.primary]}
+                  tintColor={COLORS.primary}
+                />
+              }
+            >
+              {/* WAZ status banner */}
+              {(() => {
+                const badge = wazBadge(waz);
+                return (
+                  <View style={[s.wazBanner, { backgroundColor: badge.bg, borderColor: badge.color + '44' }]}>
+                    <Ionicons name={badge.icon} size={18} color={badge.color} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.wazTitle, { color: badge.color }]}>
+                        {wazStatusLabel(waz, t)}
+                      </Text>
+                      <Text style={s.wazSub}>
+                        {childName} Â· {ageMonths}mo Â· {t('energy_target')}: {energyTargetLabel(ageMonths)}
+                      </Text>
+                    </View>
+                    {waz != null && (
+                      <Text style={[s.wazBig, { color: badge.color }]}>WAZ {waz.toFixed(1)}</Text>
+                    )}
+                  </View>
+                );
+              })()}
+
+              {/* Referral card */}
+              {effectivePlan?.requiresReferral && effectivePlan.referralReason && (
+                <ReferralCard
+                  severity={effectivePlan.severity}
+                  reason={effectivePlan.referralReason}
+                  childName={childName}
+                  waz={waz} haz={haz} whz={whz}
+                />
+              )}
+
+              {/* Error notice */}
+              {isUsingFallback && planError && (
+                <View style={s.softError}>
+                  <Ionicons name="information-circle-outline" size={16} color={COLORS.upcoming} />
+                  <Text style={s.softErrorText}>{t('plan_error')}</Text>
+                  <TouchableOpacity style={s.retryBtn} onPress={refreshPlan}>
+                    <Text style={s.retryText}>{t('refresh_plan')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Loading */}
+              {planLoading && !effectivePlan && (
+                <View style={s.loadingWrap}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                  <Text style={s.loadingText}>
+                    {t('generating')}
+                  </Text>
+                </View>
+              )}
+
+              {/* Plan summary */}
+              {effectivePlan && !planLoading && (
+                <PlanSummaryBanner plan={effectivePlan} />
+              )}
+
+              {/* Meal cards */}
+              {effectivePlan?.slots.map((slot, i) => (
+                <MealCard
+                  key={slot.type}
+                  slot={slot}
+                  index={i}
+                  onSwap={handleSwap}
+                />
+              ))}
+
+              {/* DB attribution */}
+              {effectivePlan && (
+                <View style={s.sourceCard}>
+                  <Ionicons name="server-outline" size={12} color={COLORS.textMuted} />
+                  <Text style={s.sourceText}>
+                    Foods from Kenya Food Database Â· WHO IYCF 2023 Â· Kenya MoH MIYCN 2023â€“2028
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          )}
+
+          {/*
+           * CF Guide, EBF Guide, Responsive Feeding tabs:
+           * Conditionally render them here based on activeTab.
+           *
+           * Example:
+           *   {isEbf && activeTab === 'guide' && <EbfScreen feedingStage={feedingStage} />}
+           *   {!isEbf && activeTab === 'guide' && <CfGuideTab ageMonths={ageMonths} />}
+           *   {!isEbf && activeTab === 'rf' && <ResponsiveFeedingTab />}
+           */}
+
+          {/* â”€â”€ Ask Zuri Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {activeTab === 'ask' && (
+            <View style={{ flex: 1 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.chipsRow}
+                style={s.chipsScroll}
+              >
+                {QUICK_CHIPS.map(chip => (
+                  <TouchableOpacity
+                    key={chip}
+                    style={s.chip}
+                    onPress={() => sendChat(chip)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={s.chipText}>{chip}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <ScrollView
+                ref={chatRef}
+                style={{ flex: 1 }}
+                contentContainerStyle={s.chatContent}
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: true })}
+              >
+                {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+                {chatLoading && (
+                  <View style={s.thinking}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={s.thinkingText}>Zuri is thinkingâ€¦</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <View style={[s.inputRow, { paddingBottom: insets.bottom + 8 }]}>
+                <TextInput
+                  style={s.input}
+                  value={chatInput}
+                  onChangeText={setChatInput}
+                  placeholder="Ask about feeding, textures, foods in today's planâ€¦"
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline
+                  maxLength={400}
+                  returnKeyType="send"
+                  onSubmitEditing={() => sendChat()}
+                />
+                <TouchableOpacity
+                  style={[
+                    s.sendBtn,
+                    (!chatInput.trim() || chatInput.trim().length < 3) && s.sendBtnOff,
+                  ]}
+                  onPress={() => sendChat()}
+                  disabled={!chatInput.trim() || chatInput.trim().length < 3 || chatLoading}
+                >
+                  <Ionicons name="send" size={16} color={COLORS.white} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+        </View>
+
+
+      </KeyboardAvoidingView>
+    </NutritionErrorBoundary>
+  );
+}
+
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const rf = StyleSheet.create({
+  card:        { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10 },
+  iconWrap:    { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  title:       { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.textPrimary, marginBottom: 4 },
+  body:        { fontFamily: FONTS.regular, fontSize: 13, color: COLORS.textSecondary, lineHeight: 19 },
+});
+
+const s = StyleSheet.create({
+  screen:            { flex: 1, backgroundColor: '#F2F4F7' },
+  simpleHeader:      { backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingBottom: 20 },
+  simpleHeaderTitle: { fontFamily: FONTS.extrabold, fontSize: 32, color: COLORS.white },
+  listContent:       { padding: 16 },
+  wazBanner:         { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: RADIUS.lg, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 },
+  wazTitle:          { fontFamily: FONTS.semibold, fontSize: 13 },
+  wazSub:            { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  wazBig:            { fontFamily: FONTS.bold, fontSize: 16 },
+  loadingWrap:       { alignItems: 'center', paddingVertical: 60, gap: 12 },
+  loadingText:       { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  softError:         { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.upcomingLight, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.upcoming + '44', padding: 12, marginBottom: 12 },
+  softErrorText:     { flex: 1, fontFamily: FONTS.regular, fontSize: 12, color: COLORS.upcoming },
+  retryBtn:          { paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.upcoming },
+  retryText:         { fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.upcoming },
+  sourceCard:        { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: 12, marginTop: 8 },
+  sourceText:        { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.textMuted, flex: 1, lineHeight: 16 },
+  empty:             { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
+  emptyIcon:         { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle:        { fontFamily: FONTS.semibold, fontSize: 17, color: COLORS.textPrimary, textAlign: 'center' },
+  emptySub:          { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  chipsScroll:       { backgroundColor: COLORS.white, maxHeight: 54, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  chipsRow:          { paddingHorizontal: 16, paddingVertical: 9, gap: 8, alignItems: 'center' },
+  chip:              { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border },
+  chipText:          { fontFamily: FONTS.semibold, fontSize: 12, color: COLORS.textSecondary },
+  chatContent:       { padding: 16, gap: 8 },
+  thinking:          { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  thinkingText:      { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic' },
+  inputRow:          { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.white },
+  input:             { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 10, fontFamily: FONTS.regular, fontSize: 13, color: COLORS.textPrimary, maxHeight: 100 },
+  sendBtn:           { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  sendBtnOff:        { backgroundColor: COLORS.border },
+});
+
+
+
+
