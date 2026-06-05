@@ -1,9 +1,10 @@
-﻿// src/app/(tabs)/growth.tsx
+// src/app/(tabs)/growth.tsx
 // mamaTOTO — Growth Tracker
 // WHO colour-coded stripe system: SAM (red), MAM (amber), Normal (green)
 // Growth charts use proper WHO SD reference curves via react-native-svg
 
 import { supabase } from '@/lib/supabase';
+import { getAgeLong } from '@/lib/ageUtils';
 import { useT } from '@/hooks/useT';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { calculateZScores } from '@/lib/zscore';
@@ -984,7 +985,7 @@ export default function GrowthScreen() {
             <Text style={s.childName}>{toTitleCase(activeChild.full_name)}</Text>
             <View style={s.ageBadge}>
               <Ionicons name="time-outline" size={11} color={C.blue} />
-              <Text style={s.ageBadgeText}>{totalMonths} months old</Text>
+              <Text style={s.ageBadgeText}>{getAgeLong(activeChild.date_of_birth)}</Text>
             </View>
           </View>
           <View style={{ alignItems:'flex-end', gap:4 }}>

@@ -1,18 +1,14 @@
-﻿/**
- * src/app/(tabs)/index.tsx
- * ZuriHealth — Improved Home Screen
- * Changes: stats strip in hero, vaccine due alert, bell icon, cleaner layout
- */
-
 import { useAuthStore } from '@/store/authStore';
+import { getAgeLabel } from '@/lib/ageUtils';
 import { useChildStore } from '@/store/childStore';
 import { useVaccineStore } from '@/store/vaccineStore';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Alert,
+  Animated,
   Image,
   Platform,
   ScrollView,
@@ -30,18 +26,7 @@ function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase());
 }
 
-function getAgeLabel(dob: string) {
-  const birth = new Date(dob);
-  const now = new Date();
-  const months =
-    (now.getFullYear() - birth.getFullYear()) * 12 +
-    (now.getMonth() - birth.getMonth());
-  if (months < 1) return 'Newborn';
-  if (months < 24) return `${months} months old`;
-  const years = Math.floor(months / 12);
-  const rem = months % 12;
-  return rem > 0 ? `${years}y ${rem}m old` : `${years} years old`;
-}
+
 
 function getAgeMonths(dob: string) {
   const birth = new Date(dob);
@@ -99,25 +84,475 @@ const QUICK_ACTIONS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Daily tips — rotates by day of year
+// Smart message type + priority engine
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DAILY_TIPS = [
-  'Keep your child\'s vaccine card handy and bring it to every clinic visit. Early immunisation prevents serious illness.',
-  'Exclusive breastfeeding for the first 6 months gives your baby the best start in life.',
-  'Weigh your child every month and track growth at your MCH clinic.',
-  'Wash hands with soap before feeding your child to prevent diarrhoea.',
-  'If your child has a fever above 38°C, visit the nearest health facility.',
-  'Start complementary foods at exactly 6 months while continuing breastfeeding.',
-  'Vitamin A supplements every 6 months protect your child\'s eyesight and immunity.',
-];
+type MessageUrgency = 'urgent' | 'warning' | 'info' | 'tip';
 
-function getDailyTip(): string {
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
-  );
-  return DAILY_TIPS[dayOfYear % DAILY_TIPS.length];
+interface SmartMessage {
+  icon: string;
+  iconColor: string;
+  accentColor: string;   // border + icon bg base
+  bgColor: string;
+  heading: string;
+  text: string;
+  urgency: MessageUrgency;
+  badge?: string;        // optional pill label e.g. "Missed" / "Due today"
+  route?: string;
 }
+
+function getSmartMessage(
+  ageMonths: number,
+  latestGrowth: any,
+  dueVaccines: any[],
+  missedVaccines: any[],
+): SmartMessage {
+
+  // 1. SAM / severe acute malnutrition
+  if (latestGrowth?.whz != null && latestGrowth.whz < -3) {
+    return {
+      icon: 'warning',
+      iconColor: '#fff',
+      accentColor: '#C0392B',
+      bgColor: '#C0392B',
+      heading: 'Urgent: Severe acute malnutrition',
+      text: "Weight-for-height is critically low (SAM). Visit the nearest MCH clinic or hospital TODAY — your child qualifies for Ready-to-Use Therapeutic Food (RUTF). Do not delay.",
+      urgency: 'urgent',
+      badge: 'SAM',
+      route: '/(tabs)/growth',
+    };
+  }
+
+  // 2. MAM / moderate acute malnutrition
+  if (latestGrowth?.whz != null && latestGrowth.whz < -2) {
+    return {
+      icon: 'alert-circle',
+      iconColor: '#fff',
+      accentColor: '#E67E22',
+      bgColor: '#E67E22',
+      heading: 'Action needed: Moderate malnutrition',
+      text: "Weight-for-height indicates moderate acute malnutrition (MAM). Enrol at the MCH clinic's Supplementary Feeding Programme and increase meal frequency immediately.",
+      urgency: 'urgent',
+      badge: 'MAM',
+      route: '/(tabs)/growth',
+    };
+  }
+
+  // 3. Severely underweight (WAZ)
+  if (latestGrowth?.waz != null && latestGrowth.waz < -3) {
+    return {
+      icon: 'trending-down',
+      iconColor: '#fff',
+      accentColor: '#D35400',
+      bgColor: '#D35400',
+      heading: 'Weight alert: Severely underweight',
+      text: "Weight-for-age is critically low. Offer 4 energy-dense meals daily — eggs, groundnut paste, mashed liver, beans with oil. Visit the MCH clinic urgently.",
+      urgency: 'urgent',
+      badge: 'Urgent',
+      route: '/(tabs)/growth',
+    };
+  }
+
+  // 4. Missed vaccine
+  if (missedVaccines.length > 0) {
+  const names = missedVaccines.map(v =>
+    `${v.schedule.vaccine_name}${v.schedule.dose_number > 0 ? ` Dose ${v.schedule.dose_number}` : ''}`
+  ).join(', ');
+  const count = missedVaccines.length;
+  return {
+    icon: 'medical',
+    iconColor: '#fff',
+    accentColor: '#C0392B',
+    bgColor: '#C0392B',
+    heading: count > 1 ? `${count} missed vaccines` : 'Missed vaccine',
+    text: `${names} ${count > 1 ? 'were' : 'was'} missed. Visit your nearest MCH clinic as soon as possible to catch up — delayed vaccines leave your child unprotected.`,
+    urgency: 'urgent',
+    badge: count > 1 ? `${count} Missed` : 'Missed',
+    route: '/(tabs)/vaccines',
+  };
+}
+
+  // 5. Vaccine due within 7 days
+  const soonDue = dueVaccines.find(v => v.daysUntilDue != null && v.daysUntilDue <= 7);
+  if (soonDue) {
+    const name = `${soonDue.schedule.vaccine_name}${soonDue.schedule.dose_number > 0 ? ` Dose ${soonDue.schedule.dose_number}` : ''}`;
+    const days = soonDue.daysUntilDue;
+    const dueLabel = days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days}d`;
+    return {
+      icon: 'calendar',
+      iconColor: '#fff',
+      accentColor: '#0F6E56',
+      bgColor: '#0F6E56',
+      heading: 'Vaccine due soon',
+      text: `${name} is due ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}. Book your MCH clinic visit now to keep immunisations on schedule.`,
+      urgency: 'warning',
+      badge: dueLabel,
+      route: '/(tabs)/vaccines',
+    };
+  }
+
+  // 6. Any due vaccine
+  if (dueVaccines.length > 0) {
+    const v = dueVaccines[0];
+    const name = `${v.schedule.vaccine_name}${v.schedule.dose_number > 0 ? ` Dose ${v.schedule.dose_number}` : ''}`;
+    return {
+      icon: 'medical-outline',
+      iconColor: '#fff',
+      accentColor: '#1D9E75',
+      bgColor: '#1D9E75',
+      heading: 'Vaccination reminder',
+      text: `${name} is due. Visit your MCH clinic to keep your child protected. Always bring the immunisation card.`,
+      urgency: 'warning',
+      badge: 'Due',
+      route: '/(tabs)/vaccines',
+    };
+  }
+
+  // 7. Complementary feeding transitions
+  const CF_TRANSITIONS = [
+    { age: 6,  heading: 'Time to start solid foods',       text: 'Your baby is 6 months — start complementary foods alongside breastfeeding. Begin with thick smooth porridge, mashed vegetables or fruits. Continue breastfeeding on demand.' },
+    { age: 8,  heading: 'Expand food texture and variety', text: 'At 8 months offer mashed and finely chopped family foods 3 times daily. Introduce eggs, mashed liver, and beans for iron and protein.' },
+    { age: 12, heading: 'Transition to family foods',      text: 'Your child is 1 year old. Offer chopped family foods 3–4 times daily. Continue breastfeeding — it still provides up to 50% of energy. Avoid salt, sugar, and processed snacks.' },
+    { age: 24, heading: 'Toddler diet transition',         text: 'Your child is 2 years old. Offer family foods 3 times daily with 2 healthy snacks. Ensure variety across all food groups: grains, proteins, vegetables, fruits, and dairy.' },
+  ];
+  const transition = CF_TRANSITIONS.find(t => ageMonths >= t.age && ageMonths < t.age + 2);
+  if (transition) {
+    return {
+      icon: 'nutrition-outline',
+      iconColor: '#fff',
+      accentColor: '#E67E22',
+      bgColor: '#E67E22',
+      heading: transition.heading,
+      text: transition.text,
+      urgency: 'info',
+      badge: 'Feeding milestone',
+      route: '/(tabs)/nutrition',
+    };
+  }
+
+  // 8. Vitamin A due
+  if (ageMonths >= 6 && ageMonths <= 60 && ageMonths % 6 === 0) {
+    return {
+      icon: 'sunny-outline',
+      iconColor: '#fff',
+      accentColor: '#1D9E75',
+      bgColor: '#1D9E75',
+      heading: 'Vitamin A supplement due',
+      text: `At ${ageMonths} months your child is due for their Vitamin A supplement — given free at all Kenya MCH clinics. It protects against blindness and serious infections.`,
+      urgency: 'info',
+      badge: 'Free at MCH',
+      route: '/(tabs)/vaccines',
+    };
+  }
+
+  // 9. Deworming due
+  if (ageMonths >= 12 && ageMonths % 6 === 0) {
+    return {
+      icon: 'shield-checkmark-outline',
+      iconColor: '#fff',
+      accentColor: '#2471A3',
+      bgColor: '#2471A3',
+      heading: 'Deworming due',
+      text: `Your child is due for deworming at ${ageMonths} months. Mebendazole is given free at MCH clinics — worms cause anaemia and stunted growth.`,
+      urgency: 'info',
+      badge: 'Free at MCH',
+    };
+  }
+
+  // 10. Growth overdue or missing
+  if (latestGrowth) {
+    const daysSince = Math.floor((Date.now() - new Date(latestGrowth.date).getTime()) / 86400000);
+    if (daysSince > 30) {
+      return {
+        icon: 'bar-chart-outline',
+        iconColor: '#fff',
+        accentColor: '#534AB7',
+        bgColor: '#534AB7',
+        heading: 'Time to weigh your child',
+        text: `Last weight recorded ${daysSince} days ago. Monthly growth monitoring at your MCH clinic helps catch problems early.`,
+        urgency: 'warning',
+        badge: `${daysSince}d ago`,
+        route: '/(tabs)/growth',
+      };
+    }
+  } else {
+    return {
+      icon: 'analytics-outline',
+      iconColor: '#fff',
+      accentColor: '#534AB7',
+      bgColor: '#534AB7',
+      heading: "Record your child's first weight",
+      text: 'No growth records yet. Add weight and height to start tracking against WHO standards and catch concerns early.',
+      urgency: 'warning',
+      badge: 'Not recorded',
+      route: '/(tabs)/growth',
+    };
+  }
+
+  // 11. Stunting
+  if (latestGrowth?.haz != null && latestGrowth.haz < -2) {
+    return {
+      icon: 'trending-down-outline',
+      iconColor: '#fff',
+      accentColor: '#D35400',
+      bgColor: '#D35400',
+      heading: latestGrowth.haz < -3 ? 'Severe stunting detected' : 'Stunting — monitor closely',
+      text: "Height-for-age is below normal, indicating chronic undernutrition. Improve dietary diversity, ensure all 7 food groups daily, and visit the MCH clinic for a nutritional assessment.",
+      urgency: 'warning',
+      badge: latestGrowth.haz < -3 ? 'Severe' : 'Monitor',
+      route: '/(tabs)/growth',
+    };
+  }
+
+  // 12. Overweight / obese
+  if (latestGrowth?.whz != null && latestGrowth.whz > 2) {
+    return {
+      icon: 'fitness-outline',
+      iconColor: '#fff',
+      accentColor: '#2471A3',
+      bgColor: '#2471A3',
+      heading: latestGrowth.whz > 3 ? 'Weight concern: Obese' : 'Weight concern: Overweight',
+      text: 'Review feeding practices with an MCH nurse. Avoid high-sugar foods, sweetened drinks, and excessive snacking. Monitor weight monthly.',
+      urgency: 'warning',
+      badge: 'Monitor',
+      route: '/(tabs)/growth',
+    };
+  }
+
+  // 13. Age-appropriate feeding default
+  const FEEDING_DEFAULTS = [
+    { minAge: 0,  maxAge: 6,  heading: 'Exclusive breastfeeding',        text: 'Your baby under 6 months needs breast milk only — no water, no porridge, no formula. Breastfeed on demand at least 8–12 times per day including at night.' },
+    { minAge: 6,  maxAge: 9,  heading: 'Feeding tip for 6–8 months',     text: 'Offer 2–3 meals of thick smooth porridge daily alongside breastfeeding. Add mashed orange vegetables, eggs, and a few drops of oil for extra energy.' },
+    { minAge: 9,  maxAge: 12, heading: 'Feeding tip for 9–11 months',    text: 'Offer 3–4 mashed or finely chopped meals daily. Include iron-rich foods: mashed liver once a week, eggs, beans, and omena. Continue breastfeeding.' },
+    { minAge: 12, maxAge: 24, heading: 'Feeding tip for 12–23 months',   text: 'Offer 3 meals and 1–2 nutritious snacks daily from family foods. Breast milk still provides up to 50% of energy — continue breastfeeding up to 2 years.' },
+    { minAge: 24, maxAge: 60, heading: 'Feeding tip for toddlers',       text: 'Your toddler needs 3 meals and 2 healthy snacks daily with foods from all food groups. Limit sugar and processed foods. Ensure daily dark green leafy vegetables.' },
+  ];
+  const fm = FEEDING_DEFAULTS.find(f => ageMonths >= f.minAge && ageMonths < f.maxAge);
+  if (fm) {
+    return {
+      icon: 'restaurant-outline',
+      iconColor: '#fff',
+      accentColor: '#E67E22',
+      bgColor: '#E67E22',
+      heading: fm.heading,
+      text: fm.text,
+      urgency: 'tip',
+      badge: 'Nutrition tip',
+      route: '/(tabs)/nutrition',
+    };
+  }
+
+  return {
+    icon: 'bulb-outline',
+    iconColor: '#fff',
+    accentColor: '#1D9E75',
+    bgColor: '#1D9E75',
+    heading: 'Health reminder',
+    text: 'Visit your MCH clinic regularly for growth monitoring, vaccines, and nutritional support — free for all children under 5 in Kenya.',
+    urgency: 'tip',
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Premium Smart Message Card component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SmartMessageCard({
+  msg,
+  onPress,
+}: {
+  msg: SmartMessage;
+  onPress?: () => void;
+}) {
+  const isUrgent  = msg.urgency === 'urgent';
+  const isWarning = msg.urgency === 'warning';
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(12)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim  = useRef(new Animated.Value(0.7)).current;
+
+  useEffect(() => {
+    // Slide + fade in on mount
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 60, friction: 8, useNativeDriver: true }),
+    ]).start();
+
+    // Pulse icon for urgent/warning
+    if (isUrgent || isWarning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1,   duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+
+    // Glow / shimmer on the badge for urgent
+    if (isUrgent) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1,   duration: 600, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0.6, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [isUrgent, isWarning]);
+
+  const inner = (
+    <Animated.View
+      style={[
+        sc.card,
+        { backgroundColor: msg.bgColor, opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      {/* Decorative circles */}
+      <View style={[sc.decor1, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
+      <View style={[sc.decor2, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
+
+      {/* Top row: icon + badge */}
+      <View style={sc.topRow}>
+        <Animated.View style={[sc.iconWrap, { transform: [{ scale: pulseAnim }] }]}>
+          <View style={[sc.iconCircle, { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
+            <Ionicons name={msg.icon as any} size={22} color={msg.iconColor} />
+          </View>
+        </Animated.View>
+
+        {msg.badge && (
+          <Animated.View style={[sc.badge, { opacity: isUrgent ? glowAnim : 1 }]}>
+            <Text style={sc.badgeText}>{msg.badge}</Text>
+          </Animated.View>
+        )}
+      </View>
+
+      {/* Heading + body */}
+      <Text style={sc.heading}>{msg.heading}</Text>
+      <Text style={sc.body}>{msg.text}</Text>
+
+      {/* Footer CTA */}
+      {onPress && (
+        <View style={sc.footer}>
+          <Text style={sc.ctaText}>Tap to view details</Text>
+          <View style={sc.ctaArrow}>
+            <Ionicons name="arrow-forward" size={12} color={msg.bgColor} />
+          </View>
+        </View>
+      )}
+    </Animated.View>
+  );
+
+  return onPress ? (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.88}
+      style={sc.wrapper}
+    >
+      {inner}
+    </TouchableOpacity>
+  ) : (
+    <View style={sc.wrapper}>{inner}</View>
+  );
+}
+
+// Smart card styles
+const sc = StyleSheet.create({
+  wrapper: {
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  card: {
+    borderRadius: 22,
+    padding: 18,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+  },
+  decor1: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    top: -40,
+    right: -30,
+  },
+  decor2: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    bottom: -20,
+    right: 60,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  iconWrap: {
+    alignSelf: 'flex-start',
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  heading: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 6,
+    letterSpacing: -0.2,
+  },
+  body: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.88)',
+    lineHeight: 18,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.18)',
+  },
+  ctaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+    flex: 1,
+  },
+  ctaArrow: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main screen
@@ -133,25 +568,31 @@ export default function HomeScreen() {
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
   const ageMonths = activeChild?.date_of_birth ? getAgeMonths(activeChild.date_of_birth) : 0;
 
-  // Load data for stats strip
-  useEffect(() => {
-    if (!activeChild?.id) return;
-    fetchGrowthRecords(activeChild.id);
-    (async () => {
-      if (schedules.length === 0) await fetchSchedules();
-      const imms = await fetchImmunizations(activeChild.id);
-      computeRows(activeChild.date_of_birth, imms);
-    })();
-  }, [activeChild?.id]);
+  // Refresh every time screen is focused so smart message always reflects latest data
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeChild?.id) return;
+      fetchGrowthRecords(activeChild.id);
+      (async () => {
+        if (schedules.length === 0) await fetchSchedules();
+        const imms = await fetchImmunizations(activeChild.id);
+        computeRows(activeChild.date_of_birth, imms);
+      })();
+    }, [activeChild?.id]),
+  );
 
-  // Stats
-  const latestGrowth = growthRecords[0] ?? null;
-  const vaccineGiven = vaccineRows.filter(r => r.status === 'given').length;
-  const vaccineTotal = vaccineRows.length;
-  const dueVaccines = vaccineRows.filter(r => r.status === 'due');
-  const missedVaccines = vaccineRows.filter(r => r.status === 'missed');
-  const alertVaccine = dueVaccines[0] ?? missedVaccines[0] ?? null;
-  const alertIsMissed = !!missedVaccines[0] && !dueVaccines[0];
+  // Derived stats
+  const latestGrowth    = growthRecords[0] ?? null;
+  const vaccineGiven    = vaccineRows.filter(r => r.status === 'given').length;
+  const vaccineTotal    = vaccineRows.length;
+  const dueVaccines     = vaccineRows.filter(r => r.status === 'due');
+  const missedVaccines  = vaccineRows.filter(r => r.status === 'missed');
+  const alertVaccine    = dueVaccines[0] ?? missedVaccines[0] ?? null;
+  const alertIsMissed   = !!missedVaccines[0] && !dueVaccines[0];
+
+  const smartMsg = activeChild
+    ? getSmartMessage(ageMonths, latestGrowth, dueVaccines, missedVaccines)
+    : null;
 
   const handleSignOut = () => {
     const doSignOut = () =>
@@ -270,7 +711,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* NEW: Stats strip */}
+        {/* Stats strip */}
         {activeChild && (
           <View style={styles.statsStrip}>
             <View style={styles.statPill}>
@@ -299,7 +740,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.statPill}>
               <Text style={styles.statLabel}>Age</Text>
-              <Text style={styles.statValue}>{ageMonths}mo</Text>
+              <Text style={styles.statValue}>{activeChild?.date_of_birth ? getAgeLabel(activeChild.date_of_birth) : "—"}</Text>
               <Text style={styles.statSub}>
                 {ageMonths < 6 ? 'Infant' : ageMonths < 24 ? 'Baby' : 'Toddler'}
               </Text>
@@ -364,9 +805,11 @@ export default function HomeScreen() {
               {alertVaccine.schedule.dose_number > 0 ? ` Dose ${alertVaccine.schedule.dose_number}` : ''}
             </Text>
             <Text style={styles.alertSub}>
-              {alertIsMissed ? 'Missed — visit your MCH clinic' : 'Due soon — schedule a visit'}
-            </Text>
-          </View>
+            {alertIsMissed
+              ? `${missedVaccines.length > 1 ? `${missedVaccines.length} vaccines` : 'Vaccine'} missed — visit your MCH clinic`
+              : 'Due soon — schedule a visit'}
+          </Text>
+                    </View>
           <View style={[
             styles.alertBadge,
             { backgroundColor: alertIsMissed ? COLORS.missedLight : COLORS.dueLight },
@@ -435,18 +878,15 @@ export default function HomeScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* ── Daily Tip ─────────────────────────────────────────────────── */}
-      <View style={styles.tipCard}>
-        <View style={styles.tipIconWrap}>
-          <Ionicons name="bulb" size={20} color="#E65100" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.tipHeading}>Daily Tip</Text>
-          <Text style={styles.tipText}>{getDailyTip()}</Text>
-        </View>
-      </View>
+      {/* ── Smart contextual message ──────────────────────────────────── */}
+      {smartMsg && (
+        <SmartMessageCard
+          msg={smartMsg}
+          onPress={smartMsg.route ? () => router.push(smartMsg.route as any) : undefined}
+        />
+      )}
 
-      <View style={{ height: 140 }} />
+      <View style={{ height: 32 }} />
     </ScrollView>
   );
 }
@@ -703,27 +1143,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary + '40',
   },
   zuriBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
-
-  // Tip card
-  tipCard: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: '#FFF8E1',
-    borderRadius: 18,
-    padding: 14,
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-    borderLeftWidth: 3,
-    borderLeftColor: '#FF9800',
-  },
-  tipIconWrap: {
-    width: 36, height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFE0B2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tipHeading: { fontSize: 12, fontWeight: '800', color: '#E65100', marginBottom: 4 },
-  tipText:    { fontSize: 12, color: '#795548', lineHeight: 18 },
 });
+
+
+
+

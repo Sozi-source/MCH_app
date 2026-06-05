@@ -129,9 +129,9 @@ function findImmunization(
 ): Immunization | null {
   const candidates = immunizations.filter(i => {
     if (i.vaccine_name !== schedule.vaccine_name) return false;
-    const iHasDose = i.dose_number !== null && i.dose_number !== undefined;
-    const sHasDose = schedule.dose_number !== null && schedule.dose_number !== undefined && schedule.dose_number !== 0;
-    if (iHasDose || sHasDose) return i.dose_number === schedule.dose_number;
+    if (schedule.dose_number !== null && schedule.dose_number !== undefined) {
+      return i.dose_number === schedule.dose_number;
+    }
     return true;
   });
   if (candidates.length === 0) return null;

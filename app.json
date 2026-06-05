@@ -1,61 +1,71 @@
 {
-    "expo":  {
-                 "name":  "ZuriHealth",
-                 "slug":  "mamaTOTO",
-                 "version":  "1.0.0",
-                 "orientation":  "portrait",
-                 "icon":  "./assets/images/icon.png",
-                 "scheme":  "motherandchild",
-                 "userInterfaceStyle":  "automatic",
-                 "android":  {
-                                 "adaptiveIcon":  {
-                                                      "foregroundImage":  "./assets/images/icon.png",
-                                                      "backgroundColor":  "#E6F4FE"
-                                                  },
-                                 "predictiveBackGestureEnabled":  false,
-                                 "package":  "com.sozi.ZuriHealth",
-                                 "softwareKeyboardLayoutMode":  "resize"
-                             },
-                 "web":  {
-                             "output":  "static",
-                             "favicon":  "./assets/images/icon.png"
-                         },
-                 "plugins":  [
-                                 [
-                                     "expo-router",
-                                     {
-                                         "root":  "src/app"
-                                     }
-                                 ],
-                                 [
-                                     "expo-splash-screen",
-                                     {
-                                         "backgroundColor":  "#208AEF",
-                                         "image":  "./assets/images/icon.png",
-                                         "imageWidth":  250
-                                     }
-                                 ],
-                                 "expo-secure-store",
-                                 [
-                                     "expo-notifications",
-                                     {
-                                         "icon":  "./assets/images/icon.png",
-                                         "color":  "#2A9D6E",
-                                         "defaultChannel":  "ZuriHealth-urgent",
-                                         "enableBackgroundRemoteNotifications":  false
-                                     }
-                                 ],
-                                 "expo-sharing",
-                                 "expo-font"
-                             ],
-                 "experiments":  {
-                                     "typedRoutes":  false,
-                                     "reactCompiler":  true
-                                 },
-                 "extra":  {
-                               "eas":  {
-                                           "projectId":  "26fd1a97-b4cb-421b-99d7-24428a1d0fe6"
-                                       }
-                           }
-             }
+  "expo": {
+    "name": "ZuriHealth",
+    "slug": "mamaTOTO",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "motherandchild",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#E6F4FE"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.sozi.ZuriHealth",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "src/app"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/icon.png",
+          "imageWidth": 250
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#2A9D6E",
+          "defaultChannel": "ZuriHealth-urgent",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
+      "expo-sharing",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": false,
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "26fd1a97-b4cb-421b-99d7-24428a1d0fe6"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/26fd1a97-b4cb-421b-99d7-24428a1d0fe6",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "ios": {}
+  }
 }

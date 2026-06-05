@@ -1,8 +1,9 @@
-﻿/**
+/**
  * src/app/(admin)/children.tsx
  * ZuriHealth — Admin: Children Management Screen
  */
 import { supabase } from '@/lib/supabase';
+import { getAgeLabel } from '@/lib/ageUtils';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
@@ -124,7 +125,7 @@ export default function AdminChildrenScreen() {
                     </View>
                   </View>
                   <Text style={styles.age}>
-                    {ageLabel(c.date_of_birth)} · DOB {new Date(c.date_of_birth).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {getgetAgeLabel(c.date_of_birth)} · DOB {new Date(c.date_of_birth).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </Text>
                   {c.parent_name && (
                     <Text style={styles.parent}>

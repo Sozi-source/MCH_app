@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 
 // Must match app.json scheme + route in Supabase dashboard Redirect URLs
-const RESET_REDIRECT = 'motherandchild:///reset-password';
+const RESET_REDIRECT = 'motherandchild://reset-password';
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());

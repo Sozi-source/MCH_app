@@ -1,4 +1,4 @@
-﻿function toTitleCase(str: string): string {
+function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (ch: string) => ch.toUpperCase());
 }
 
@@ -56,7 +56,7 @@ function getAgeLabel(dob: string): string {
   const totalMonths =
     (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   if (totalMonths < 1) return 'Newborn';
-  if (totalMonths < 24) return `${totalMonths} mo`;
+  if (totalMonths < 24) return `$(getAgeLabel(child.date_of_birth))`;
   const years = Math.floor(totalMonths / 12);
   const rem = totalMonths % 12;
   return rem > 0 ? `${years}y ${rem}m` : `${years} yr${years !== 1 ? 's' : ''}`;

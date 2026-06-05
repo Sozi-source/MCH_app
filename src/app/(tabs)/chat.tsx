@@ -1,9 +1,10 @@
-﻿/**
+/**
  * ZuriHealth — Premium Chat Screen
  * With rich message rendering (parsed sections, styled bullets, source badge)
- * OPTIMIZED: Added proper spacing, input pushed down, better scroll behavior
+ * FIXED: inputWrapper no longer stacks at bottom on initial render
  */
 import { COLORS, RADIUS } from '@/lib/theme';
+import { getAgeLabel } from '@/lib/ageUtils';
 import { useChildStore } from '@/store/childStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useVaccineStore } from '@/store/vaccineStore';
@@ -31,7 +32,7 @@ import {
   Keyboard,
 } from 'react-native';
 
-const { width: W, height: H } = Dimensions.get('window');
+const { width: W } = Dimensions.get('window');
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
@@ -88,7 +89,7 @@ interface ChildContext {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Message parser — splits AI text into answer / bullets / source
+// Message parser
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ParsedMessage {
@@ -107,7 +108,6 @@ function parseAIMessage(raw: string): ParsedMessage {
 
   for (const line of lines) {
     if (/EMERGENCY|999|go to the nearest hospital/i.test(line)) emergency = true;
-
     if (/^(Source:|📚|_Source)/i.test(line)) {
       source = line.replace(/^(Source:|📚|_Source:?)\s*/i, '').replace(/_/g, '').trim();
       continue;
@@ -119,21 +119,15 @@ function parseAIMessage(raw: string): ParsedMessage {
     answerLines.push(line);
   }
 
-  return {
-    answer: answerLines.join(' ').trim(),
-    bullets,
-    source,
-    emergency,
-  };
+  return { answer: answerLines.join(' ').trim(), bullets, source, emergency };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rich AI bubble renderer
+// Rich AI bubble
 // ─────────────────────────────────────────────────────────────────────────────
 
 function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }) {
   const parsed = parseAIMessage(content);
-
   return (
     <View style={rb.card}>
       {parsed.emergency && (
@@ -142,32 +136,28 @@ function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }
           <Text style={rb.emergencyText}>EMERGENCY — Go to hospital NOW or call 999</Text>
         </View>
       )}
-
       {parsed.answer.length > 0 && (
         <Text style={rb.answerText}>{parsed.answer}</Text>
       )}
-
       {parsed.bullets.length > 0 && (
         <View style={rb.bulletsSection}>
           <Text style={rb.bulletsSectionLabel}>What to do</Text>
-          {parsed.bullets.map((b, i) => (
+          {parsed.bullets.map((bullet, i) => (
             <View key={i} style={rb.bulletRow}>
               <View style={rb.bulletDot}>
                 <Text style={rb.bulletDotText}>{i + 1}</Text>
               </View>
-              <Text style={rb.bulletText}>{b}</Text>
+              <Text style={rb.bulletText}>{bullet}</Text>
             </View>
           ))}
         </View>
       )}
-
       {parsed.source && (
         <View style={rb.sourceBadge}>
           <Ionicons name="book-outline" size={11} color={COLORS.primary} />
           <Text style={rb.sourceText}>{parsed.source}</Text>
         </View>
       )}
-
       <Text style={rb.timeText}>{timeStr}</Text>
     </View>
   );
@@ -206,9 +196,9 @@ function buildSystemPrompt(ctx: ChildContext): string {
   }
 
   const birthInfo = [
-    ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg}kg`        : null,
-    ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm}cm`         : null,
-    ctx.healthFacility ? `facility: ${ctx.healthFacility}`            : null,
+    ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg}kg`  : null,
+    ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm}cm`  : null,
+    ctx.healthFacility ? `facility: ${ctx.healthFacility}`      : null,
   ].filter(Boolean).join(', ');
 
   return `You are Zuri, a trusted maternal and child health assistant by ZuriHealth, built for Kenyan mothers.
@@ -253,6 +243,7 @@ function TypingDots() {
   const d0 = useRef(new Animated.Value(0.3)).current;
   const d1 = useRef(new Animated.Value(0.3)).current;
   const d2 = useRef(new Animated.Value(0.3)).current;
+
   useEffect(() => {
     const anim = (dot: Animated.Value, delay: number) =>
       Animated.loop(
@@ -264,6 +255,7 @@ function TypingDots() {
       ).start();
     anim(d0, 0); anim(d1, 150); anim(d2, 300);
   }, []);
+
   return (
     <View style={b.aiRow}>
       <View style={b.avatar}>
@@ -285,9 +277,10 @@ function TypingDots() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
-  const isUser   = msg.role === 'user';
+  const isUser    = msg.role === 'user';
   const slideAnim = useRef(new Animated.Value(isNew ? 16 : 0)).current;
   const fadeAnim  = useRef(new Animated.Value(isNew ? 0  : 1)).current;
+
   useEffect(() => {
     if (!isNew) return;
     Animated.parallel([
@@ -295,6 +288,7 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
       Animated.timing(fadeAnim,  { toValue: 1, duration: 280, useNativeDriver: true }),
     ]).start();
   }, []);
+
   const timeStr = msg.timestamp.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
 
   if (isUser) {
@@ -318,6 +312,7 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
   );
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Data status pill
 // ─────────────────────────────────────────────────────────────────────────────
@@ -336,12 +331,14 @@ function DataPill({ icon, label, ok }: { icon: string; label: string; ok: boolea
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
-  const insets = useSafeAreaInsets();
+  const insets       = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+
   const { children, selectedChildId, growthRecords, fetchGrowthRecords } = useChildStore();
   const { vaccineRows, fetchSchedules, fetchImmunizations, computeRows, schedules } = useVaccineStore();
   const { language } = useSettingsStore();
+
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
-  const tabBarHeight = useBottomTabBarHeight();
 
   const getAgeMonths = (): number => {
     if (!activeChild?.date_of_birth) return 0;
@@ -397,15 +394,15 @@ export default function ChatScreen() {
     (async () => {
       try {
         const { data } = await supabase.from('child_milestones').select('milestone_id, status').eq('child_id', activeChild.id);
-        const records = data ?? [];
+        const records    = data ?? [];
         const achieved   = records.filter((r: any) => r.status === 'achieved');
         const inProgress = records.filter((r: any) => r.status === 'in_progress');
         setMilestoneData({
           total: 54, achieved: achieved.length, inProgress: inProgress.length,
           achievedTitles:   achieved.slice(0, 10).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
-          inProgressTitles: inProgress.slice(0, 5).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
+          inProgressTitles: inProgress.slice(0, 5).map((r: any)  => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
         });
-      } catch (e) {}
+      } catch {}
     })();
   }, [activeChild?.id]);
 
@@ -418,7 +415,7 @@ export default function ChatScreen() {
         .map(r => `${r.schedule.vaccine_name}${r.schedule.dose_number > 0 ? ' dose ' + r.schedule.dose_number : ''}`)
         .slice(0, 8);
     const recentRecords = [...growthRecords].slice(0, 3).reverse() as GrowthRecord[];
-    const feedingStage = getFeedingStage(ageMonths) as
+    const feedingStage  = getFeedingStage(ageMonths) as
       | { stage?: string; breastfeeding?: string; mealsPerDay?: string; foodGroups?: string }
       | null | undefined;
     const feedingParts: string[] = [];
@@ -447,7 +444,7 @@ export default function ChatScreen() {
       feedingExtra: feedingParts.join('\n'),
       milestonesTotal: milestoneData.total, milestonesAchieved: milestoneData.achieved,
       milestonesInProgress: milestoneData.inProgress,
-      achievedMilestoneTitles: milestoneData.achievedTitles,
+      achievedMilestoneTitles:   milestoneData.achievedTitles,
       inProgressMilestoneTitles: milestoneData.inProgressTitles,
       language,
     };
@@ -460,13 +457,15 @@ export default function ChatScreen() {
       : `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
     timestamp: new Date(),
   }]);
-  const [input, setInput]         = useState('');
-  const [loading, setLoading]     = useState(false);
+
+  const [input,    setInput]    = useState('');
+  const [loading,  setLoading]  = useState(false);
   const [newMsgIds, setNewMsgIds] = useState<Set<string>>(new Set(['0']));
-  const scrollRef = useRef<ScrollView>(null);
-  const inputRef = useRef<TextInput>(null);
-  
-  const scrollToBottom = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  const scrollRef  = useRef<ScrollView>(null);
+  const inputRef   = useRef<TextInput>(null);
+
+  const scrollToBottom = () =>
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
   const sendMessage = async (text?: string) => {
     const msg = (text ?? input).trim();
@@ -476,13 +475,15 @@ export default function ChatScreen() {
     const updated = [...messages, userMsg];
     setMessages(updated);
     setNewMsgIds(prev => new Set([...prev, id]));
-    setInput(''); 
-    setLoading(true); 
+    setInput('');
+    setLoading(true);
     scrollToBottom();
     Keyboard.dismiss();
-    
+
     try {
-      const apiMessages = updated.filter(m => m.id !== '0').map(m => ({ role: m.role, content: m.content }));
+      const apiMessages = updated
+        .filter(m => m.id !== '0')
+        .map(m => ({ role: m.role, content: m.content }));
       const ctx = buildChildContext();
       const res = await fetch(GROQ_API_URL, {
         method: 'POST',
@@ -502,7 +503,9 @@ export default function ChatScreen() {
       const errId = (Date.now() + 1).toString();
       setMessages(prev => [...prev, { id: errId, role: 'assistant', content: "I'm having trouble connecting. Please check your internet and try again.", timestamp: new Date() }]);
       setNewMsgIds(prev => new Set([...prev, errId]));
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const ageMonths   = getAgeMonths();
@@ -512,11 +515,12 @@ export default function ChatScreen() {
   const hasDue      = vaccineRows.some(r => r.status === 'due');
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }} 
-      behavior="padding"
+    <KeyboardAvoidingView
+      style={s.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      {/* ── Header ───────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <View style={s.headerOrb1} />
         <View style={s.headerOrb2} />
@@ -524,7 +528,10 @@ export default function ChatScreen() {
           <View style={s.avatarWrap}>
             <View style={s.avatarOuter}>
               <View style={s.avatarInner}>
-                <Image source={require('@/assets/features/zuri-ai-256.png')} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                <Image
+                  source={require('@/assets/features/zuri-ai-256.png')}
+                  style={{ width: 28, height: 28, borderRadius: 14 }}
+                />
               </View>
             </View>
             <View style={s.onlineDot} />
@@ -540,11 +547,12 @@ export default function ChatScreen() {
             </View>
           )}
         </View>
+
         {activeChild && (
           <View style={s.contextStrip}>
             <View style={s.childPill}>
               <Ionicons name={activeChild.sex === 'female' ? 'female' : 'male'} size={11} color={COLORS.primary} />
-              <Text style={s.childPillText}>{activeChild.full_name} · {ageMonths}mo</Text>
+              <Text style={s.childPillText}>{activeChild.full_name} · {getAgeLabel(activeChild.date_of_birth)}</Text>
             </View>
             <View style={s.dataPills}>
               <DataPill icon="barbell-outline"          label="Growth"   ok={hasGrowth} />
@@ -554,21 +562,25 @@ export default function ChatScreen() {
         )}
       </View>
 
-      <ScrollView 
-        ref={scrollRef} 
-        style={s.messageList} 
-        contentContainerStyle={s.messageContent} 
-        showsVerticalScrollIndicator={false} 
+      {/* ── Messages ─────────────────────────────────────────────────────── */}
+      <ScrollView
+        ref={scrollRef}
+        style={s.messageList}
+        contentContainerStyle={s.messageContent}
+        showsVerticalScrollIndicator={false}
         onContentSizeChange={scrollToBottom}
+        keyboardShouldPersistTaps="handled"
       >
-        {messages.map(msg => <MessageBubble key={msg.id} msg={msg} isNew={newMsgIds.has(msg.id)} />)}
+        {messages.map(msg => (
+          <MessageBubble key={msg.id} msg={msg} isNew={newMsgIds.has(msg.id)} />
+        ))}
         {loading && <TypingDots />}
-        {/* Extra space at bottom for better readability */}
-        <View style={{ height: 40 }} />
+        <View style={{ height: 16 }} />
       </ScrollView>
 
-      {/* Input Bar - Fixed at bottom with proper spacing */}
-      <View style={s.inputWrapper}>
+      {/* ── Input bar ────────────────────────────────────────────────────── */}
+      {/* FIX: paddingBottom uses tabBarHeight — no marginBottom or inner height View */}
+      <View style={[s.inputWrapper, { paddingBottom: insets.bottom + 8 }]}>
         <View style={s.inputBar}>
           <TextInput
             ref={inputRef}
@@ -584,208 +596,102 @@ export default function ChatScreen() {
           />
           <TouchableOpacity
             style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnOff]}
-            onPress={() => sendMessage()} 
-            disabled={!input.trim() || loading} 
+            onPress={() => sendMessage()}
+            disabled={!input.trim() || loading}
             activeOpacity={0.85}
           >
-            {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={17} color="#fff" />}
+            {loading
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Ionicons name="send" size={17} color="#fff" />
+            }
           </TouchableOpacity>
         </View>
-        {/* Extra safe area padding for bottom */}
-        <View style={{ height: tabBarHeight }} />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles - Optimized with proper spacing
+// Styles
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: { 
-  flex: 1, 
-  backgroundColor: COLORS.background,
-  marginBottom: 0,
-},
-  header: { 
-    backgroundColor: COLORS.primary,
-    paddingBottom: 12, 
-    paddingHorizontal: 16, 
-    overflow: 'hidden' 
-  },
-  headerOrb1: { 
-    position: 'absolute', 
-    width: 180, 
-    height: 180, 
-    borderRadius: 90, 
-    backgroundColor: 'rgba(255,255,255,0.07)', 
-    top: -60, 
-    right: -40 
-  },
-  headerOrb2: { 
-    position: 'absolute', 
-    width: 100, 
-    height: 100, 
-    borderRadius: 50, 
-    backgroundColor: 'rgba(255,255,255,0.05)', 
-    bottom: -40, 
-    left: 40 
-  },
-  headerRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 12, 
-    marginBottom: 12 
-  },
-  avatarWrap:  { 
-    position: 'relative' 
-  },
-  avatarOuter: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 16, 
-    backgroundColor: 'rgba(255,255,255,0.15)', 
-    borderWidth: 1.5, 
-    borderColor: 'rgba(255,255,255,0.25)', 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  avatarInner: { 
-    width: 32, 
-    height: 32, 
-    borderRadius: 11, 
-    overflow: 'hidden', 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  onlineDot: { 
-    position: 'absolute', 
-    bottom: 1, 
-    right: 1, 
-    width: 10, 
-    height: 10, 
-    borderRadius: 5, 
-    backgroundColor: COLORS.given, 
-    borderWidth: 2, 
-    borderColor: COLORS.primary 
-  },
-  headerTitle: { 
-    fontSize: 18, 
-    fontWeight: '800', 
-    color: COLORS.white, 
-    letterSpacing: -0.5 
-  },
-  headerSub: {   
-    fontSize: 11, 
-    color: COLORS.primaryMid, 
-    marginTop: 1, 
-    fontWeight: '500' 
-  },
-  alertBadge: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4, 
-    backgroundColor: COLORS.missed, 
-    paddingHorizontal: 10, 
-    paddingVertical: 5, 
-    borderRadius: RADIUS.full 
-  },
-  alertBadgeText: { 
-    fontSize: 10, 
-    fontWeight: '700', 
-    color: '#fff' 
-  },
-  contextStrip: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    gap: 8 
-  },
-  childPill: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 5, 
-    backgroundColor: 'rgba(255,255,255,0.15)', 
-    paddingHorizontal: 10, 
-    paddingVertical: 5, 
-    borderRadius: RADIUS.full 
-  },
-  childPillText: { 
-    fontSize: 11, 
-    color: COLORS.white, 
-    fontWeight: '600' 
-  },
-  dataPills: { 
-    flexDirection: 'row', 
-    gap: 6 
-  },
-  messageList: { 
-    flex: 1 
-  },
-  messageContent: { 
-    paddingHorizontal: 16, 
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  
-  // Input section - Pushed down with proper spacing
-  inputWrapper: {
+  screen:         { flex: 1, backgroundColor: COLORS.background },
+  header:         { backgroundColor: COLORS.primary, paddingBottom: 12, paddingHorizontal: 16, overflow: 'hidden' },
+  headerOrb1:     { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40 },
+  headerOrb2:     { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 40 },
+  headerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  avatarWrap:     { position: 'relative' },
+  avatarOuter:    { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  avatarInner:    { width: 32, height: 32, borderRadius: 11, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  onlineDot:      { position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.given, borderWidth: 2, borderColor: COLORS.primary },
+  headerTitle:    { fontSize: 18, fontWeight: '800', color: COLORS.white, letterSpacing: -0.5 },
+  headerSub:      { fontSize: 11, color: COLORS.primaryMid, marginTop: 1, fontWeight: '500' },
+  alertBadge:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.missed, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
+  alertBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  contextStrip:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  childPill:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
+  childPillText:  { fontSize: 11, color: COLORS.white, fontWeight: '600' },
+  dataPills:      { flexDirection: 'row', gap: 6 },
+  messageList:    { flex: 1 },
+  messageContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
+
+  // FIX: no marginBottom — paddingBottom is injected via tabBarHeight at render time
+inputWrapper: {
   backgroundColor: COLORS.white,
   borderTopWidth: 1,
   borderTopColor: COLORS.border,
-  paddingTop: 8,
-  paddingBottom: 4,
-  // Ensure it's always above the tab bar
+  paddingTop: 10,
   elevation: 10,
   shadowColor: '#000',
   shadowOffset: { width: 0, height: -2 },
   shadowOpacity: 0.06,
   shadowRadius: 4,
 },
-  inputBar: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-end', 
-    gap: 10, 
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
     paddingHorizontal: 16,
+    paddingBottom: 8,
   },
-  input: { 
-    flex: 1, 
-    backgroundColor: COLORS.background, 
-    borderRadius: RADIUS.lg, 
-    paddingHorizontal: 14, 
-    paddingVertical: 12, 
-    fontSize: 14, 
-    color: COLORS.textPrimary, 
-    borderWidth: 1.5, 
-    borderColor: COLORS.border, 
+  input: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
     maxHeight: 100,
     minHeight: 44,
   },
-  sendBtn: { 
-    width: 46, 
-    height: 46, 
-    borderRadius: 15, 
-    backgroundColor: COLORS.primary, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
+  sendBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
     elevation: 6,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
-  sendBtnOff: { 
+  sendBtnOff: {
     backgroundColor: COLORS.primaryMid,
     elevation: 0,
     shadowOpacity: 0,
   },
-  bottomSafeArea: {
-    height: Platform.OS === 'ios' ? 34 : 24,
-  },
 });
 
-// Rich bubble styles - Increased spacing
+// ─────────────────────────────────────────────────────────────────────────────
+// Rich bubble styles
+// ─────────────────────────────────────────────────────────────────────────────
+
 const rb = StyleSheet.create({
   card: {
     backgroundColor: COLORS.white,
@@ -800,177 +706,43 @@ const rb = StyleSheet.create({
     gap: 12,
     marginBottom: 4,
   },
-  emergencyBanner: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8,
-    backgroundColor: '#DC2626',
-    borderRadius: 10, 
-    paddingHorizontal: 12, 
-    paddingVertical: 8,
-  },
-  emergencyText: { 
-    fontSize: 12, 
-    fontWeight: '700', 
-    color: '#fff', 
-    flex: 1 
-  },
-  answerText: { 
-    fontSize: 14, 
-    lineHeight: 22, 
-    color: COLORS.textPrimary, 
-    fontWeight: '500' 
-  },
-  bulletsSection: {
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  bulletsSectionLabel: {
-    fontSize: 11, 
-    fontWeight: '800', 
-    color: COLORS.primary,
-    textTransform: 'uppercase', 
-    letterSpacing: 0.6, 
-    marginBottom: 4,
-  },
-  bulletRow: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-start', 
-    gap: 10 
-  },
-  bulletDot: {
-    width: 22, 
-    height: 22, 
-    borderRadius: 11,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center', 
-    justifyContent: 'center',
-    flexShrink: 0, 
-    marginTop: 1,
-  },
-  bulletDotText: { 
-    fontSize: 10, 
-    fontWeight: '800', 
-    color: '#fff' 
-  },
-  bulletText: { 
-    fontSize: 13, 
-    lineHeight: 20, 
-    color: COLORS.textPrimary, 
-    flex: 1 
-  },
-  sourceBadge: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6,
-    backgroundColor: '#F0F9FF',
-    borderRadius: 10, 
-    paddingHorizontal: 12, 
-    paddingVertical: 8,
-    borderWidth: 1, 
-    borderColor: '#BAE6FD',
-  },
-  sourceText: { 
-    fontSize: 11, 
-    color: COLORS.primary, 
-    fontWeight: '600', 
-    flex: 1 
-  },
-  timeText: { 
-    fontSize: 10, 
-    color: COLORS.textMuted, 
-    textAlign: 'right', 
-    marginTop: 4 
-  },
+  emergencyBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#DC2626', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  emergencyText:   { fontSize: 12, fontWeight: '700', color: '#fff', flex: 1 },
+  answerText:      { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary, fontWeight: '500' },
+  bulletsSection:  { backgroundColor: COLORS.primaryLight, borderRadius: 12, padding: 12, gap: 8 },
+  bulletsSectionLabel: { fontSize: 11, fontWeight: '800', color: COLORS.primary, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
+  bulletRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  bulletDot:       { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  bulletDotText:   { fontSize: 10, fontWeight: '800', color: '#fff' },
+  bulletText:      { fontSize: 13, lineHeight: 20, color: COLORS.textPrimary, flex: 1 },
+  sourceBadge:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F9FF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#BAE6FD' },
+  sourceText:      { fontSize: 11, color: COLORS.primary, fontWeight: '600', flex: 1 },
+  timeText:        { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 4 },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bubble styles
+// ─────────────────────────────────────────────────────────────────────────────
 
 const b = StyleSheet.create({
-  userRow: { 
-    alignItems: 'flex-end', 
-    marginBottom: 16 
-  },
-  userBubble: { 
-  backgroundColor: COLORS.primary, 
-  borderRadius: 18, 
-  borderBottomRightRadius: 5, 
-  paddingHorizontal: 16, 
-  paddingVertical: 12, 
-  maxWidth: W * 0.8, 
-  elevation: 4,
-  shadowColor: COLORS.primary,
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.25,
-  shadowRadius: 6,
-},
-  userText: { 
-    fontSize: 14, 
-    lineHeight: 21, 
-    color: COLORS.white 
-  },
-  userTime: { 
-    fontSize: 10, 
-    color: COLORS.primaryMid, 
-    marginTop: 6, 
-    textAlign: 'right' 
-  },
-  aiRow: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-end', 
-    gap: 10, 
-    marginBottom: 16 
-  },
-  avatar: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 18, 
-    overflow: 'hidden', 
-    elevation: 3 
-  },
-  aiBubble: { 
-    backgroundColor: COLORS.white, 
-    borderRadius: 18, 
-    borderBottomLeftRadius: 5, 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    maxWidth: W * 0.75, 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    elevation: 2 
-  },
-  aiText: { 
-    fontSize: 14, 
-    lineHeight: 22, 
-    color: COLORS.textPrimary 
-  },
-  aiTime: { 
-    fontSize: 10, 
-    color: COLORS.textMuted, 
-    marginTop: 6 
-  },
+  userRow:    { alignItems: 'flex-end', marginBottom: 16 },
+  userBubble: { backgroundColor: COLORS.primary, borderRadius: 18, borderBottomRightRadius: 5, paddingHorizontal: 16, paddingVertical: 12, maxWidth: W * 0.8, elevation: 4, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6 },
+  userText:   { fontSize: 14, lineHeight: 21, color: COLORS.white },
+  userTime:   { fontSize: 10, color: COLORS.primaryMid, marginTop: 6, textAlign: 'right' },
+  aiRow:      { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 16 },
+  avatar:     { width: 36, height: 36, borderRadius: 18, overflow: 'hidden', elevation: 3 },
+  aiBubble:   { backgroundColor: COLORS.white, borderRadius: 18, borderBottomLeftRadius: 5, paddingHorizontal: 16, paddingVertical: 12, maxWidth: W * 0.75, borderWidth: 1, borderColor: COLORS.border, elevation: 2 },
+  aiText:     { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary },
+  aiTime:     { fontSize: 10, color: COLORS.textMuted, marginTop: 6 },
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Pill styles
+// ─────────────────────────────────────────────────────────────────────────────
+
 const pill = StyleSheet.create({
-  wrap: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4, 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
-    borderRadius: RADIUS.full, 
-    borderWidth: 1 
-  },
-  ok:   { 
-    backgroundColor: COLORS.givenLight, 
-    borderColor: COLORS.given 
-  },
-  warn: { 
-    backgroundColor: COLORS.dueLight,   
-    borderColor: COLORS.due  
-  },
-  text: { 
-    fontSize: 10, 
-    fontWeight: '600' 
-  },
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, borderWidth: 1 },
+  ok:   { backgroundColor: COLORS.givenLight, borderColor: COLORS.given },
+  warn: { backgroundColor: COLORS.dueLight,   borderColor: COLORS.due  },
+  text: { fontSize: 10, fontWeight: '600' },
 });

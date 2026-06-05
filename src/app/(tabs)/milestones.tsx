@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/app/(tabs)/milestones.tsx
  * ZuriHealth — Milestone Tracker
  * Professional design matching vaccines screen
@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { getAgeLabel, getAgeLong } from '@/lib/ageUtils';
 import { COLORS, RADIUS, FONTS, HEADER } from '@/lib/theme';
 import { useChildStore } from '@/store/childStore';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -489,7 +490,7 @@ export default function MilestonesScreen() {
             </View>
             <Text style={styles.headerTitle}>{toTitleCase(child.full_name)}</Text>
             <View style={styles.childPill}>
-              <Text style={styles.headerSub}>{childAgeMonths} months old</Text>
+              <Text style={styles.headerSub}>{child?.date_of_birth ? getAgeLong(child.date_of_birth) : ''}</Text>
             </View>
           </View>
 

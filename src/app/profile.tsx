@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { COLORS, RADIUS } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,66 +23,96 @@ import {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuthStore();
+  const { user, setSession, signOut } = useAuthStore();
 
-  const [fullName, setFullName] = useState(user?.user_metadata?.full_name ?? '');
-  const [phone, setPhone] = useState(user?.user_metadata?.phone ?? '');
-  const [saving, setSaving] = useState(false);
+  const [fullName,         setFullName]         = useState(user?.user_metadata?.full_name ?? '');
+  const [phone,            setPhone]            = useState(user?.user_metadata?.phone ?? '');
+  const [saving,           setSaving]           = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [newPassword,      setNewPassword]      = useState('');
+  const [showPassword,     setShowPassword]     = useState(false);
 
+  // Re-derive initials from local state so avatar updates immediately after save
   const initials = fullName
     ? fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : user?.email?.[0]?.toUpperCase() ?? '?';
 
+  // ── Save profile ──────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
-    const { error } = await supabase.auth.updateUser({
+    const { data, error } = await supabase.auth.updateUser({
       data: { full_name: fullName.trim(), phone: phone.trim() },
     });
     setSaving(false);
+
     if (error) {
       Alert.alert('Error', error.message);
-    } else {
-      Alert.alert('Saved', 'Your profile has been updated.');
+      return;
     }
+
+    // Sync updated user back into the auth store so the rest of the app reflects changes
+    if (data?.user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) setSession(session);
+    }
+
+    Alert.alert('Saved', 'Your profile has been updated.');
   };
 
+  // ── Change password ───────────────────────────────────────────────────────
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      Alert.alert('Too short', 'Password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      Alert.alert('Too short', 'Password must be at least 8 characters.');
       return;
     }
     setChangingPassword(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setChangingPassword(false);
+
     if (error) {
       Alert.alert('Error', error.message);
-    } else {
-      setNewPassword('');
-      Alert.alert('Done', 'Password updated successfully.');
+      return;
     }
+
+    setNewPassword('');
+    Alert.alert('Done', 'Password updated successfully.');
   };
 
+  // ── Delete account ────────────────────────────────────────────────────────
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
-      'This will permanently delete your account and all your children\'s health data. This cannot be undone.',
+      "This will permanently delete your account and all your children's health data. This cannot be undone.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete', style: 'destructive',
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
-            await signOut();
+            // Call your Supabase edge function / RPC that deletes the user server-side,
+            // then sign out locally. Calling signOut() alone does NOT delete the account.
+            try {
+              const { error } = await supabase.rpc('delete_user_account');
+              if (error) throw error;
+              await signOut();
+            } catch (err: any) {
+              Alert.alert(
+                'Error',
+                err?.message ?? 'Could not delete account. Please contact support.'
+              );
+            }
           },
         },
       ]
     );
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={s.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
@@ -92,7 +122,11 @@ export default function ProfileScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Avatar */}
         <View style={s.avatarSection}>
           <View style={s.avatar}>
@@ -113,6 +147,7 @@ export default function ProfileScreen() {
             placeholder="Your full name"
             placeholderTextColor={COLORS.textMuted}
           />
+
           <Text style={s.fieldLabel}>Phone Number</Text>
           <TextInput
             style={s.input}
@@ -122,11 +157,13 @@ export default function ProfileScreen() {
             placeholderTextColor={COLORS.textMuted}
             keyboardType="phone-pad"
           />
+
           <Text style={s.fieldLabel}>Email</Text>
           <View style={s.readOnlyInput}>
             <Text style={s.readOnlyText}>{user?.email}</Text>
             <Ionicons name="lock-closed-outline" size={14} color={COLORS.textMuted} />
           </View>
+
           <TouchableOpacity
             style={[s.saveBtn, saving && { opacity: 0.6 }]}
             onPress={handleSave}
@@ -139,7 +176,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Change Password */}
+        {/* Security */}
         <Text style={s.sectionLabel}>SECURITY</Text>
         <View style={s.card}>
           <Text style={s.fieldLabel}>New Password</Text>
@@ -148,14 +185,22 @@ export default function ProfileScreen() {
               style={[s.input, { flex: 1, marginBottom: 0 }]}
               value={newPassword}
               onChangeText={setNewPassword}
-              placeholder="Min. 6 characters"
+              placeholder="Min. 8 characters"
               placeholderTextColor={COLORS.textMuted}
               secureTextEntry={!showPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={s.eyeBtn}>
-              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.textMuted} />
+            <TouchableOpacity
+              onPress={() => setShowPassword(p => !p)}
+              style={s.eyeBtn}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={18}
+                color={COLORS.textMuted}
+              />
             </TouchableOpacity>
           </View>
+
           <TouchableOpacity
             style={[s.saveBtn, { marginTop: 12 }, changingPassword && { opacity: 0.6 }]}
             onPress={handleChangePassword}
@@ -178,7 +223,11 @@ export default function ProfileScreen() {
             <Text style={[s.actionText, { color: '#E53935' }]}>Sign Out</Text>
             <Ionicons name="chevron-forward" size={16} color="#E53935" />
           </TouchableOpacity>
-          <TouchableOpacity style={[s.actionRow, { borderBottomWidth: 0 }]} onPress={handleDeleteAccount}>
+
+          <TouchableOpacity
+            style={[s.actionRow, { borderBottomWidth: 0 }]}
+            onPress={handleDeleteAccount}
+          >
             <View style={[s.actionIcon, { backgroundColor: '#FEE2E2' }]}>
               <Ionicons name="trash-outline" size={18} color="#B91C1C" />
             </View>

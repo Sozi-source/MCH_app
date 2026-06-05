@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useChildStore } from '@/store/childStore';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Image, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '@/lib/theme';
@@ -44,17 +45,18 @@ export default function RootLayout() {
   const isRecovery = useRef(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // 1. Hydrate existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setHydrated(true);
-      if (session?.user?.id) {
-        fetchChildren(session.user.id);
-      }
+      if (session?.user?.id) fetchChildren(session.user.id);
     });
 
+    // 2. Auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         isRecovery.current = true;
+        setSession(session);  // set the recovery session before navigating
         router.replace('/reset-password' as any);
         return;
       }
@@ -62,13 +64,34 @@ export default function RootLayout() {
         isRecovery.current = false;
       }
       setSession(session);
-      if (session?.user?.id) {
-        fetchChildren(session.user.id);
-      }
+      if (session?.user?.id) fetchChildren(session.user.id);
     });
+
+    // 3. Parse token from deep link URL manually (Android doesn't do this automatically)
+    const handleDeepLink = async (url: string) => {
+      const fragment = url.split('#')[1] ?? '';
+      const params = Object.fromEntries(new URLSearchParams(fragment));
+      if (params.type === 'recovery' && params.access_token && params.refresh_token) {
+        isRecovery.current = true;
+        const { error } = await supabase.auth.setSession({
+          access_token:  params.access_token,
+          refresh_token: params.refresh_token,
+        });
+        if (!error) {
+          router.replace('/reset-password' as any);
+        }
+      }
+    };
+
+    // Cold start: app was launched by tapping the email link
+    Linking.getInitialURL().then(url => { if (url) handleDeepLink(url); });
+
+    // Warm start: app was already running in background
+    const linkSub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
 
     return () => {
       subscription.unsubscribe();
+      linkSub.remove();
     };
   }, []);
 
