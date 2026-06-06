@@ -38,7 +38,6 @@ const tabs: {
     active:   require('@/assets/tabs/tab-progress-active.png'),
     inactive: require('@/assets/tabs/tab-progress-inactive.png'),
   },
-
 ];
 
 export default function TabLayout() {
@@ -59,34 +58,31 @@ export default function TabLayout() {
           backgroundColor: COLORS.white,
           borderTopColor: 'transparent',
           borderTopWidth: 0,
-          paddingBottom: 10,
+          // Enough internal padding so icons+labels aren't clipped
+          paddingBottom: 14,
           paddingTop: 10,
-          height: 90,
-          marginBottom: 20,
+          height: 70,
+          // Sits just above the Android nav bar
+          marginBottom: 40,
           marginHorizontal: 16,
           borderRadius: 24,
           position: 'absolute',
           bottom: 0,
           elevation: 12,
-
           ...Platform.select({
-
-            ios: { shadowColor: '#208AEF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16 },
-
+            ios:     { shadowColor: '#208AEF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16 },
             android: { elevation: 13 },
-
             default: {},
-
           }),
         },
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '700',
-          marginTop: 3,
+          marginTop: 2,
           letterSpacing: 0.2,
         },
         tabBarItemStyle: {
-          paddingVertical: 4,
+          paddingVertical: 2,
         },
       }}
     >
@@ -99,16 +95,16 @@ export default function TabLayout() {
             tabBarIcon: ({ focused }) => (
               <Image
                 source={focused ? t.active : t.inactive}
-                style={{ width: 28, height: 28, resizeMode: 'contain' }}
+                style={{ width: 26, height: 26, resizeMode: 'contain' }}
               />
             ),
           }}
         />
       ))}
       {/* Hidden screens — still routable but not shown in tab bar */}
-      <Tabs.Screen name="chat"         options={{ href: null }} />
-      <Tabs.Screen name="settings"     options={{ href: null }} />
-      <Tabs.Screen name="reviews"      options={{ href: null }} />
+      <Tabs.Screen name="chat"      options={{ href: null }} />
+      <Tabs.Screen name="settings"  options={{ href: null }} />
+      <Tabs.Screen name="reviews"   options={{ href: null }} />
       <Tabs.Screen name="nutrition" options={{ href: null }} />
     </Tabs>
   );

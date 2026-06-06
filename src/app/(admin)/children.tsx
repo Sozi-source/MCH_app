@@ -26,15 +26,6 @@ interface ChildRow {
   parent_email?: string;
 }
 
-function ageLabel(dob: string): string {
-  const diff = Date.now() - new Date(dob).getTime();
-  const months = Math.floor(diff / (1000 * 60 * 60 * 24 * 30.44));
-  if (months < 12) return `${months}mo`;
-  const years = Math.floor(months / 12);
-  const rem = months % 12;
-  return rem > 0 ? `${years}y ${rem}mo` : `${years}y`;
-}
-
 export default function AdminChildrenScreen() {
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,7 +116,7 @@ export default function AdminChildrenScreen() {
                     </View>
                   </View>
                   <Text style={styles.age}>
-                    {getgetAgeLabel(c.date_of_birth)} · DOB {new Date(c.date_of_birth).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {getAgeLabel(c.date_of_birth)} · DOB {new Date(c.date_of_birth).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </Text>
                   {c.parent_name && (
                     <Text style={styles.parent}>

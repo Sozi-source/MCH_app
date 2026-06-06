@@ -965,7 +965,7 @@ const rfc = StyleSheet.create({
 export default function NutritionScreen() {
   const t            = useT();
   const insets       = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = 110;
 
   const activeChild        = useChildStore(s => s.activeChild);
   const growthRecords      = useChildStore(s => s.growthRecords);

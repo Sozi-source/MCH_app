@@ -6,6 +6,7 @@ function toTitleCase(str: string): string {
 // ZuriHealth — Children Management Screen (Fully Optimized)
 
 import { useT } from '@/hooks/useT';
+import { getAgeLabel } from '@/lib/ageUtils';
 import { COLORS, RADIUS, FONTS } from '@/lib/theme';
 import { useAuthStore } from '@/store/authStore';
 import { useChildStore } from '@/store/childStore';
@@ -50,17 +51,7 @@ const GENDER_STYLES = {
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function getAgeLabel(dob: string): string {
-  const birth = new Date(dob);
-  const now = new Date();
-  const totalMonths =
-    (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-  if (totalMonths < 1) return 'Newborn';
-  if (totalMonths < 24) return `$(getAgeLabel(child.date_of_birth))`;
-  const years = Math.floor(totalMonths / 12);
-  const rem = totalMonths % 12;
-  return rem > 0 ? `${years}y ${rem}m` : `${years} yr${years !== 1 ? 's' : ''}`;
-}
+// getAgeLabel is imported from @/lib/ageUtils — single source of truth
 
 function getInitials(name: string): string {
   return name
@@ -131,11 +122,6 @@ const ActivePill = React.memo(() => (
 ));
 ActivePill.displayName = 'ActivePill';
 
-// ─── FIX 1: Wrap AnimatedChildCard in React.memo ─────────────────────────────
-// Previously this was a plain function — every FlatList re-render created a new
-// instance, re-running the animation ref and causing unnecessary work.
-// With React.memo + stable onPress (id-based, see FIX 2), the card only
-// re-renders when its own data or selection state changes.
 const AnimatedChildCard = React.memo(({
   item,
   isSelected,
@@ -143,7 +129,7 @@ const AnimatedChildCard = React.memo(({
 }: {
   item: Child;
   isSelected: boolean;
-  onPress: (id: string) => void; // FIX 2: accept id so parent can use useCallback without closure
+  onPress: (id: string) => void;
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const gs = GENDER_STYLES[item.sex];
@@ -277,10 +263,6 @@ export default function ChildrenScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading]   = useState(true);
 
-  // ─── FIX 3: Single fetch source — useFocusEffect only ────────────────────
-  // Previously both useEffect and useFocusEffect called loadChildren, causing
-  // a double-fetch on every mount. useFocusEffect fires on mount AND on
-  // subsequent focuses, so useEffect is redundant and removed entirely.
   useFocusEffect(
     useCallback(() => {
       if (!hydrated) return;
@@ -312,11 +294,6 @@ export default function ChildrenScreen() {
     router.push('/children/add');
   }, [router]);
 
-  // ─── FIX 2: Stable onPress — receives id, no closure over item ───────────
-  // The old renderItem did: onPress={() => handleChildPress(item.id)
-  // That arrow function is a new reference every render, breaking React.memo
-  // on AnimatedChildCard. Now the card calls onPress(item.id) itself, and
-  // handleChildPress is a stable useCallback with no per-item closure.
   const handleChildPress = useCallback((childId: string) => {
     selectChild(childId);
     router.push(`/children/${childId}`);
@@ -354,12 +331,11 @@ export default function ChildrenScreen() {
 
   const keyExtractor = useCallback((item: Child) => item.id, []);
 
-  // Stable renderItem — no inline arrow capturing item.id
   const renderItem = useCallback(({ item }: { item: Child }) => (
     <AnimatedChildCard
       item={item}
       isSelected={item.id === selectedChildId}
-      onPress={handleChildPress} // stable ref; card calls onPress(item.id) internally
+      onPress={handleChildPress}
     />
   ), [selectedChildId, handleChildPress]);
 
@@ -593,7 +569,6 @@ const styles = StyleSheet.create({
     }),
   },
   emptyBtnText: { color: COLORS.onPrimary, fontWeight: '700', fontSize: 15, fontFamily: FONTS?.bold },
-
 
   // Tip Card
   tipCard: {

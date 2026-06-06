@@ -1,9 +1,15 @@
 /**
+ * src/app/(tabs)/chat.tsx
  * ZuriHealth — Premium Chat Screen
- * With rich message rendering (parsed sections, styled bullets, source badge)
- * FIXED: inputWrapper no longer stacks at bottom on initial render
+ *
+ * Keyboard handling: mirrors NutritionScreen pattern exactly.
+ * - KeyboardAvoidingView behavior="height" (Android) / "padding" (iOS)
+ * - Inline input with paddingBottom: TAB_OFFSET + 8 (hardcoded — chat is a
+ *   hidden tab so useBottomTabBarHeight() returns 0)
+ * - No ChatInputBar component, no Keyboard listeners, no marginBottom tricks
  */
-import { COLORS, RADIUS } from '@/lib/theme';
+
+import { COLORS, RADIUS, FONTS } from '@/lib/theme';
 import { getAgeLabel } from '@/lib/ageUtils';
 import { useChildStore } from '@/store/childStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -14,13 +20,13 @@ import type { GrowthRecord } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import {
   Image,
   ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -29,7 +35,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Keyboard,
 } from 'react-native';
 
 const { width: W } = Dimensions.get('window');
@@ -38,54 +43,58 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
 const GROQ_MODEL   = 'llama-3.3-70b-versatile';
 
+// Floating tab bar: position absolute, bottom 10, height 70
+// chat is a hidden tab so useBottomTabBarHeight() returns 0 — hardcode it
+const TAB_OFFSET = 102;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
+  id:        string;
+  role:      'user' | 'assistant';
+  content:   string;
   timestamp: Date;
 }
 
 interface ChildContext {
-  name: string;
-  ageMonths: number;
-  sex: string;
-  dobStr: string;
-  birthWeightKg: number | undefined;
-  birthHeightCm: number | undefined;
-  healthFacility: string | undefined;
-  latestWeight: number | null;
-  latestHeight: number | null;
-  latestAgeAtMeasure: number | null;
-  latestMeasureDate: string | null;
-  waz: number | null;
-  haz: number | null;
-  whz: number | null;
-  weightStatus: string | null;
-  heightStatus: string | null;
-  whStatus: string | null;
-  totalGrowthRecords: number;
-  weightTrendKg: number[];
-  weightTrendDates: string[];
-  vaccineGiven: number;
-  vaccineDue: number;
-  vaccineMissed: number;
-  vaccineUpcoming: number;
-  vaccineTotal: number;
-  dueVaccineNames: string[];
-  missedVaccineNames: string[];
-  feedingStageLabel: string;
-  feedingStageDescription: string;
-  feedingExtra: string;
-  milestonesTotal: number;
-  milestonesAchieved: number;
-  milestonesInProgress: number;
-  achievedMilestoneTitles: string[];
+  name:                      string;
+  ageMonths:                 number;
+  sex:                       string;
+  dobStr:                    string;
+  birthWeightKg:             number | undefined;
+  birthHeightCm:             number | undefined;
+  healthFacility:            string | undefined;
+  latestWeight:              number | null;
+  latestHeight:              number | null;
+  latestAgeAtMeasure:        number | null;
+  latestMeasureDate:         string | null;
+  waz:                       number | null;
+  haz:                       number | null;
+  whz:                       number | null;
+  weightStatus:              string | null;
+  heightStatus:              string | null;
+  whStatus:                  string | null;
+  totalGrowthRecords:        number;
+  weightTrendKg:             number[];
+  weightTrendDates:          string[];
+  vaccineGiven:              number;
+  vaccineDue:                number;
+  vaccineMissed:             number;
+  vaccineUpcoming:           number;
+  vaccineTotal:              number;
+  dueVaccineNames:           string[];
+  missedVaccineNames:        string[];
+  feedingStageLabel:         string;
+  feedingStageDescription:   string;
+  feedingExtra:              string;
+  milestonesTotal:           number;
+  milestonesAchieved:        number;
+  milestonesInProgress:      number;
+  achievedMilestoneTitles:   string[];
   inProgressMilestoneTitles: string[];
-  language: string;
+  language:                  string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,18 +102,18 @@ interface ChildContext {
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ParsedMessage {
-  answer: string;
-  bullets: string[];
-  source: string | null;
+  answer:    string;
+  bullets:   string[];
+  source:    string | null;
   emergency: boolean;
 }
 
 function parseAIMessage(raw: string): ParsedMessage {
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-  const bullets: string[] = [];
+  const bullets: string[]     = [];
   const answerLines: string[] = [];
-  let source: string | null = null;
-  let emergency = false;
+  let source: string | null   = null;
+  let emergency               = false;
 
   for (const line of lines) {
     if (/EMERGENCY|999|go to the nearest hospital/i.test(line)) emergency = true;
@@ -173,11 +182,11 @@ function buildSystemPrompt(ctx: ChildContext): string {
     const wazLabel = ctx.waz != null ? getZScoreDisplay(ctx.waz).label : 'N/A';
     const hazLabel = ctx.haz != null ? getZScoreDisplay(ctx.haz).label : 'N/A';
     const whzLabel = ctx.whz != null ? getZScoreDisplay(ctx.whz).label : 'N/A';
-    let trendNote = '';
+    let trendNote  = '';
     if (ctx.weightTrendKg.length >= 2) {
       const diff = ctx.weightTrendKg[ctx.weightTrendKg.length - 1] - ctx.weightTrendKg[0];
       const sign = diff >= 0 ? '+' : '';
-      trendNote = `\n  - Weight trend (last ${ctx.weightTrendKg.length} records): ${sign}${diff.toFixed(2)} kg — ${diff >= 0 ? 'gaining' : 'losing'} weight`;
+      trendNote  = `\n  - Weight trend (last ${ctx.weightTrendKg.length} records): ${sign}${diff.toFixed(2)} kg — ${diff >= 0 ? 'gaining' : 'losing'} weight`;
     }
     growthSection = `Latest (${ctx.latestMeasureDate ?? 'unknown'}, age ${ctx.latestAgeAtMeasure ?? ctx.ageMonths}mo):
   - Weight: ${ctx.latestWeight}kg (WAZ ${ctx.waz?.toFixed(2) ?? 'N/A'} = ${wazLabel})
@@ -196,16 +205,16 @@ function buildSystemPrompt(ctx: ChildContext): string {
   }
 
   const birthInfo = [
-    ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg}kg`  : null,
-    ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm}cm`  : null,
-    ctx.healthFacility ? `facility: ${ctx.healthFacility}`      : null,
+    ctx.birthWeightKg  ? `birth weight ${ctx.birthWeightKg}kg` : null,
+    ctx.birthHeightCm  ? `birth length ${ctx.birthHeightCm}cm` : null,
+    ctx.healthFacility ? `facility: ${ctx.healthFacility}`     : null,
   ].filter(Boolean).join(', ');
 
   return `You are Zuri, a trusted maternal and child health assistant by ZuriHealth, built for Kenyan mothers.
 
 CHILD PROFILE:
 Name: ${ctx.name} | Age: ${ctx.ageMonths}mo | Sex: ${ctx.sex} | DOB: ${ctx.dobStr}
-${birthInfo ? birthInfo : ''}
+${birthInfo}
 Growth: ${growthSection}
 Vaccines: ${vaccineSection}
 Feeding: ${ctx.feedingStageLabel} — ${ctx.feedingStageDescription} ${ctx.feedingExtra}
@@ -312,7 +321,6 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew: boolean }) {
   );
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Data status pill
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,12 +335,46 @@ function DataPill({ icon, label, ok }: { icon: string; label: string; ok: boolea
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Milestone titles
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MILESTONE_TITLES: Record<string, string> = {
+  m_2_mot_1: 'Holds head up briefly',       m_2_lan_1: 'Makes cooing sounds',
+  m_2_soc_1: 'Social smile',                m_2_cog_1: 'Follows object with eyes',
+  m_4_mot_1: 'Holds head steady',           m_4_mot_2: 'Pushes up on arms',
+  m_4_lan_1: 'Laughs and squeals',          m_4_soc_1: 'Recognises familiar faces',
+  m_4_cog_1: 'Reaches for objects',         m_6_mot_1: 'Sits with support',
+  m_6_mot_2: 'Rolls both ways',             m_6_lan_1: 'Babbles consonants',
+  m_6_soc_1: 'Knows familiar vs strangers', m_6_cog_1: 'Explores with mouth and hands',
+  m_9_mot_1: 'Sits without support',        m_9_mot_2: 'Crawls or scoots',
+  m_9_lan_1: 'Says mama / dada',            m_9_soc_1: 'Plays peek-a-boo',
+  m_9_cog_1: 'Object permanence',           m_12_mot_1: 'Pulls to stand',
+  m_12_mot_2: 'Cruises along furniture',    m_12_lan_1: 'First words',
+  m_12_soc_1: 'Waves bye-bye',              m_12_cog_1: 'Imitates actions',
+  m_12_cog_2: 'Uses pincer grasp',          m_18_mot_1: 'Walks independently',
+  m_18_mot_2: 'Climbs onto furniture',      m_18_lan_1: 'Uses 10-20 words',
+  m_18_soc_1: 'Parallel play',              m_18_cog_1: 'Points to named body parts',
+  m_24_mot_1: 'Runs steadily',              m_24_mot_2: 'Kicks a ball',
+  m_24_lan_1: 'Two-word phrases',           m_24_lan_2: '50+ word vocabulary',
+  m_24_soc_1: 'Plays with others briefly',  m_24_cog_1: 'Sorts shapes and colours',
+  m_24_cog_2: 'Simple pretend play',        m_36_mot_1: 'Jumps with both feet',
+  m_36_mot_2: 'Climbs stairs alternating',  m_36_lan_1: '3-word sentences',
+  m_36_soc_1: 'Takes turns in games',       m_36_cog_1: 'Knows own name and age',
+  m_36_cog_2: 'Draws a circle',             m_48_mot_1: 'Hops on one foot',
+  m_48_mot_2: 'Catches a bounced ball',     m_48_lan_1: 'Tells simple stories',
+  m_48_soc_1: 'Cooperative play',           m_48_cog_1: 'Counts to 10',
+  m_48_cog_2: 'Draws a person',             m_60_mot_1: 'Skips and hops well',
+  m_60_mot_2: 'Writes own name',            m_60_lan_1: 'Uses full sentences',
+  m_60_lan_2: 'Asks why questions',         m_60_soc_1: 'Follows rules in games',
+  m_60_cog_1: 'Counts to 20+',              m_60_cog_2: 'Knows letters of alphabet',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main screen
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
-  const insets       = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   const { children, selectedChildId, growthRecords, fetchGrowthRecords } = useChildStore();
   const { vaccineRows, fetchSchedules, fetchImmunizations, computeRows, schedules } = useVaccineStore();
@@ -352,37 +394,6 @@ export default function ChatScreen() {
     achievedTitles: string[]; inProgressTitles: string[];
   }>({ total: 0, achieved: 0, inProgress: 0, achievedTitles: [], inProgressTitles: [] });
 
-  const MILESTONE_TITLES: Record<string, string> = {
-    m_2_mot_1: 'Holds head up briefly',       m_2_lan_1: 'Makes cooing sounds',
-    m_2_soc_1: 'Social smile',                m_2_cog_1: 'Follows object with eyes',
-    m_4_mot_1: 'Holds head steady',           m_4_mot_2: 'Pushes up on arms',
-    m_4_lan_1: 'Laughs and squeals',          m_4_soc_1: 'Recognises familiar faces',
-    m_4_cog_1: 'Reaches for objects',         m_6_mot_1: 'Sits with support',
-    m_6_mot_2: 'Rolls both ways',             m_6_lan_1: 'Babbles consonants',
-    m_6_soc_1: 'Knows familiar vs strangers', m_6_cog_1: 'Explores with mouth and hands',
-    m_9_mot_1: 'Sits without support',        m_9_mot_2: 'Crawls or scoots',
-    m_9_lan_1: 'Says mama / dada',            m_9_soc_1: 'Plays peek-a-boo',
-    m_9_cog_1: 'Object permanence',           m_12_mot_1: 'Pulls to stand',
-    m_12_mot_2: 'Cruises along furniture',    m_12_lan_1: 'First words',
-    m_12_soc_1: 'Waves bye-bye',              m_12_cog_1: 'Imitates actions',
-    m_12_cog_2: 'Uses pincer grasp',          m_18_mot_1: 'Walks independently',
-    m_18_mot_2: 'Climbs onto furniture',      m_18_lan_1: 'Uses 10-20 words',
-    m_18_soc_1: 'Parallel play',              m_18_cog_1: 'Points to named body parts',
-    m_24_mot_1: 'Runs steadily',              m_24_mot_2: 'Kicks a ball',
-    m_24_lan_1: 'Two-word phrases',           m_24_lan_2: '50+ word vocabulary',
-    m_24_soc_1: 'Plays with others briefly',  m_24_cog_1: 'Sorts shapes and colours',
-    m_24_cog_2: 'Simple pretend play',        m_36_mot_1: 'Jumps with both feet',
-    m_36_mot_2: 'Climbs stairs alternating',  m_36_lan_1: '3-word sentences',
-    m_36_soc_1: 'Takes turns in games',       m_36_cog_1: 'Knows own name and age',
-    m_36_cog_2: 'Draws a circle',             m_48_mot_1: 'Hops on one foot',
-    m_48_mot_2: 'Catches a bounced ball',     m_48_lan_1: 'Tells simple stories',
-    m_48_soc_1: 'Cooperative play',           m_48_cog_1: 'Counts to 10',
-    m_48_cog_2: 'Draws a person',             m_60_mot_1: 'Skips and hops well',
-    m_60_mot_2: 'Writes own name',            m_60_lan_1: 'Uses full sentences',
-    m_60_lan_2: 'Asks why questions',         m_60_soc_1: 'Follows rules in games',
-    m_60_cog_1: 'Counts to 20+',              m_60_cog_2: 'Knows letters of alphabet',
-  };
-
   useEffect(() => {
     if (!activeChild?.id) return;
     fetchGrowthRecords(activeChild.id);
@@ -393,86 +404,108 @@ export default function ChatScreen() {
     })();
     (async () => {
       try {
-        const { data } = await supabase.from('child_milestones').select('milestone_id, status').eq('child_id', activeChild.id);
+        const { data } = await supabase
+          .from('child_milestones')
+          .select('milestone_id, status')
+          .eq('child_id', activeChild.id);
         const records    = data ?? [];
         const achieved   = records.filter((r: any) => r.status === 'achieved');
         const inProgress = records.filter((r: any) => r.status === 'in_progress');
         setMilestoneData({
-          total: 54, achieved: achieved.length, inProgress: inProgress.length,
+          total:            54,
+          achieved:         achieved.length,
+          inProgress:       inProgress.length,
           achievedTitles:   achieved.slice(0, 10).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
-          inProgressTitles: inProgress.slice(0, 5).map((r: any)  => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
+          inProgressTitles: inProgress.slice(0, 5).map((r: any) => MILESTONE_TITLES[r.milestone_id] ?? r.milestone_id),
         });
       } catch {}
     })();
   }, [activeChild?.id]);
 
   const buildChildContext = (): ChildContext => {
-    const ageMonths = getAgeMonths();
-    const latest: GrowthRecord | null = growthRecords[0] ?? null;
-    const countByStatus = (status: string) => vaccineRows.filter(r => r.status === status).length;
-    const namesByStatus = (status: string): string[] =>
-      vaccineRows.filter(r => r.status === status)
+    const ageMonths   = getAgeMonths();
+    const latest      = growthRecords[0] ?? null;
+    const countByStatus  = (s: string) => vaccineRows.filter(r => r.status === s).length;
+    const namesByStatus  = (s: string): string[] =>
+      vaccineRows
+        .filter(r => r.status === s)
         .map(r => `${r.schedule.vaccine_name}${r.schedule.dose_number > 0 ? ' dose ' + r.schedule.dose_number : ''}`)
         .slice(0, 8);
-    const recentRecords = [...growthRecords].slice(0, 3).reverse() as GrowthRecord[];
-    const feedingStage  = getFeedingStage(ageMonths) as
+    const recentRecords  = [...growthRecords].slice(0, 3).reverse() as GrowthRecord[];
+    const feedingStage   = getFeedingStage(ageMonths) as
       | { stage?: string; breastfeeding?: string; mealsPerDay?: string; foodGroups?: string }
       | null | undefined;
     const feedingParts: string[] = [];
     if (feedingStage?.mealsPerDay) feedingParts.push(`Meals/day: ${feedingStage.mealsPerDay}`);
     if (feedingStage?.foodGroups)  feedingParts.push(`Food groups: ${feedingStage.foodGroups}`);
+
     return {
-      name: activeChild?.full_name ?? 'your child', ageMonths,
-      sex: activeChild?.sex ?? 'unknown', dobStr: activeChild?.date_of_birth ?? 'unknown',
-      birthWeightKg: activeChild?.birth_weight_kg, birthHeightCm: activeChild?.birth_height_cm,
-      healthFacility: activeChild?.health_facility,
-      latestWeight: latest?.weight_kg ?? null, latestHeight: latest?.height_cm ?? null,
-      latestAgeAtMeasure: latest?.age_months ?? null, latestMeasureDate: latest?.date ?? null,
-      waz: latest?.waz ?? null, haz: latest?.haz ?? null, whz: latest?.whz ?? null,
-      weightStatus: latest?.waz != null ? getZScoreDisplay(latest.waz).label : null,
-      heightStatus: latest?.haz != null ? getZScoreDisplay(latest.haz).label : null,
-      whStatus:     latest?.whz != null ? getZScoreDisplay(latest.whz).label : null,
-      totalGrowthRecords: growthRecords.length,
-      weightTrendKg:    recentRecords.map(r => r.weight_kg),
-      weightTrendDates: recentRecords.map(r => r.date),
-      vaccineGiven: countByStatus('given'), vaccineDue: countByStatus('due'),
-      vaccineMissed: countByStatus('missed'), vaccineUpcoming: countByStatus('upcoming'),
-      vaccineTotal: vaccineRows.length,
-      dueVaccineNames: namesByStatus('due'), missedVaccineNames: namesByStatus('missed'),
-      feedingStageLabel:       feedingStage?.stage        ?? `${ageMonths} months`,
-      feedingStageDescription: feedingStage?.breastfeeding ?? feedingStage?.mealsPerDay ?? '',
-      feedingExtra: feedingParts.join('\n'),
-      milestonesTotal: milestoneData.total, milestonesAchieved: milestoneData.achieved,
-      milestonesInProgress: milestoneData.inProgress,
+      name:                      activeChild?.full_name ?? 'your child',
+      ageMonths,
+      sex:                       activeChild?.sex           ?? 'unknown',
+      dobStr:                    activeChild?.date_of_birth ?? 'unknown',
+      birthWeightKg:             activeChild?.birth_weight_kg,
+      birthHeightCm:             activeChild?.birth_height_cm,
+      healthFacility:            activeChild?.health_facility,
+      latestWeight:              latest?.weight_kg   ?? null,
+      latestHeight:              latest?.height_cm   ?? null,
+      latestAgeAtMeasure:        latest?.age_months  ?? null,
+      latestMeasureDate:         latest?.date        ?? null,
+      waz:                       latest?.waz         ?? null,
+      haz:                       latest?.haz         ?? null,
+      whz:                       latest?.whz         ?? null,
+      weightStatus:              latest?.waz != null ? getZScoreDisplay(latest.waz).label : null,
+      heightStatus:              latest?.haz != null ? getZScoreDisplay(latest.haz).label : null,
+      whStatus:                  latest?.whz != null ? getZScoreDisplay(latest.whz).label : null,
+      totalGrowthRecords:        growthRecords.length,
+      weightTrendKg:             recentRecords.map(r => r.weight_kg),
+      weightTrendDates:          recentRecords.map(r => r.date),
+      vaccineGiven:              countByStatus('given'),
+      vaccineDue:                countByStatus('due'),
+      vaccineMissed:             countByStatus('missed'),
+      vaccineUpcoming:           countByStatus('upcoming'),
+      vaccineTotal:              vaccineRows.length,
+      dueVaccineNames:           namesByStatus('due'),
+      missedVaccineNames:        namesByStatus('missed'),
+      feedingStageLabel:         feedingStage?.stage        ?? `${ageMonths} months`,
+      feedingStageDescription:   feedingStage?.breastfeeding ?? feedingStage?.mealsPerDay ?? '',
+      feedingExtra:              feedingParts.join('\n'),
+      milestonesTotal:           milestoneData.total,
+      milestonesAchieved:        milestoneData.achieved,
+      milestonesInProgress:      milestoneData.inProgress,
       achievedMilestoneTitles:   milestoneData.achievedTitles,
       inProgressMilestoneTitles: milestoneData.inProgressTitles,
       language,
     };
   };
 
+  // ── Chat state ─────────────────────────────────────────────────────────────
+
   const [messages, setMessages] = useState<Message[]>([{
-    id: '0', role: 'assistant',
-    content: activeChild
+    id:        '0',
+    role:      'assistant',
+    content:   activeChild
       ? `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more — all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
       : `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
     timestamp: new Date(),
   }]);
 
-  const [input,    setInput]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [input,     setInput]     = useState('');
+  const [loading,   setLoading]   = useState(false);
   const [newMsgIds, setNewMsgIds] = useState<Set<string>>(new Set(['0']));
-  const scrollRef  = useRef<ScrollView>(null);
-  const inputRef   = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const scrollToBottom = () =>
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
-  const sendMessage = async (text?: string) => {
-    const msg = (text ?? input).trim();
+  const sendMessage = async () => {
+    const msg = input.trim();
     if (!msg || loading) return;
-    const id = Date.now().toString();
+
+    const id      = Date.now().toString();
     const userMsg: Message = { id, role: 'user', content: msg, timestamp: new Date() };
     const updated = [...messages, userMsg];
+
     setMessages(updated);
     setNewMsgIds(prev => new Set([...prev, id]));
     setInput('');
@@ -486,15 +519,16 @@ export default function ChatScreen() {
         .map(m => ({ role: m.role, content: m.content }));
       const ctx = buildChildContext();
       const res = await fetch(GROQ_API_URL, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_API_KEY },
-        body: JSON.stringify({
-          model: GROQ_MODEL, max_tokens: 512,
-          messages: [{ role: 'system', content: buildSystemPrompt(ctx) }, ...apiMessages],
+        body:    JSON.stringify({
+          model:      GROQ_MODEL,
+          max_tokens: 512,
+          messages:   [{ role: 'system', content: buildSystemPrompt(ctx) }, ...apiMessages],
         }),
       });
-      const data  = await res.json();
-      const reply: string = data?.choices?.[0]?.message?.content ?? 'Sorry, I could not get a response. Please try again.';
+      const data    = await res.json();
+      const reply   = data?.choices?.[0]?.message?.content ?? 'Sorry, I could not get a response. Please try again.';
       const replyId = (Date.now() + 1).toString();
       setMessages(prev => [...prev, { id: replyId, role: 'assistant', content: reply, timestamp: new Date() }]);
       setNewMsgIds(prev => new Set([...prev, replyId]));
@@ -513,6 +547,9 @@ export default function ChatScreen() {
   const hasVaccines = vaccineRows.length > 0;
   const hasMissed   = vaccineRows.some(r => r.status === 'missed');
   const hasDue      = vaccineRows.some(r => r.status === 'due');
+  const canSend     = input.trim().length >= 1 && !loading;
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
@@ -520,10 +557,11 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+      {/* ── Header ───────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <View style={s.headerOrb1} />
         <View style={s.headerOrb2} />
+
         <View style={s.headerRow}>
           <View style={s.avatarWrap}>
             <View style={s.avatarOuter}>
@@ -536,10 +574,12 @@ export default function ChatScreen() {
             </View>
             <View style={s.onlineDot} />
           </View>
+
           <View style={{ flex: 1 }}>
             <Text style={s.headerTitle}>Zuri</Text>
             <Text style={s.headerSub}>Evidence-based · ZuriHealth</Text>
           </View>
+
           {(hasDue || hasMissed) && (
             <View style={s.alertBadge}>
               <Ionicons name="medical" size={12} color="#fff" />
@@ -551,8 +591,14 @@ export default function ChatScreen() {
         {activeChild && (
           <View style={s.contextStrip}>
             <View style={s.childPill}>
-              <Ionicons name={activeChild.sex === 'female' ? 'female' : 'male'} size={11} color={COLORS.primary} />
-              <Text style={s.childPillText}>{activeChild.full_name} · {getAgeLabel(activeChild.date_of_birth)}</Text>
+              <Ionicons
+                name={activeChild.sex === 'female' ? 'female' : 'male'}
+                size={11}
+                color={COLORS.primary}
+              />
+              <Text style={s.childPillText}>
+                {activeChild.full_name} · {getAgeLabel(activeChild.date_of_birth)}
+              </Text>
             </View>
             <View style={s.dataPills}>
               <DataPill icon="barbell-outline"          label="Growth"   ok={hasGrowth} />
@@ -562,7 +608,7 @@ export default function ChatScreen() {
         )}
       </View>
 
-      {/* ── Messages ─────────────────────────────────────────────────────── */}
+      {/* ── Messages ─────────────────────────────────────────────────── */}
       <ScrollView
         ref={scrollRef}
         style={s.messageList}
@@ -578,12 +624,10 @@ export default function ChatScreen() {
         <View style={{ height: 16 }} />
       </ScrollView>
 
-      {/* ── Input bar ────────────────────────────────────────────────────── */}
-      {/* FIX: paddingBottom uses tabBarHeight — no marginBottom or inner height View */}
-      <View style={[s.inputWrapper, { paddingBottom: insets.bottom + 8 }]}>
+      {/* ── Input bar — mirrors NutritionScreen pattern exactly ──────── */}
+      <View style={[s.inputWrapper, { paddingBottom: TAB_OFFSET + 8 }]}>
         <View style={s.inputBar}>
           <TextInput
-            ref={inputRef}
             style={s.input}
             value={input}
             onChangeText={setInput}
@@ -592,12 +636,13 @@ export default function ChatScreen() {
             multiline
             maxLength={500}
             returnKeyType="send"
-            onSubmitEditing={() => sendMessage()}
+            onSubmitEditing={sendMessage}
+            blurOnSubmit={false}
           />
           <TouchableOpacity
-            style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnOff]}
-            onPress={() => sendMessage()}
-            disabled={!input.trim() || loading}
+            style={[s.sendBtn, !canSend && s.sendBtnOff]}
+            onPress={sendMessage}
+            disabled={!canSend}
             activeOpacity={0.85}
           >
             {loading
@@ -607,6 +652,7 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
     </KeyboardAvoidingView>
   );
 }
@@ -618,8 +664,8 @@ export default function ChatScreen() {
 const s = StyleSheet.create({
   screen:         { flex: 1, backgroundColor: COLORS.background },
   header:         { backgroundColor: COLORS.primary, paddingBottom: 12, paddingHorizontal: 16, overflow: 'hidden' },
-  headerOrb1:     { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40 },
-  headerOrb2:     { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 40 },
+  headerOrb1:     { position: 'absolute', width: 180, height: 180, borderRadius: 90,  backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -40 },
+  headerOrb2:     { position: 'absolute', width: 100, height: 100, borderRadius: 50,  backgroundColor: 'rgba(255,255,255,0.05)', bottom: -40, left: 40 },
   headerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   avatarWrap:     { position: 'relative' },
   avatarOuter:    { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
@@ -636,93 +682,74 @@ const s = StyleSheet.create({
   messageList:    { flex: 1 },
   messageContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
 
-  // FIX: no marginBottom — paddingBottom is injected via tabBarHeight at render time
-inputWrapper: {
-  backgroundColor: COLORS.white,
-  borderTopWidth: 1,
-  borderTopColor: COLORS.border,
-  paddingTop: 10,
-  elevation: 10,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: -2 },
-  shadowOpacity: 0.06,
-  shadowRadius: 4,
-},
+  // Input — mirrors NutritionScreen s.inputWrapper / s.inputBar exactly
+  inputWrapper: {
+    backgroundColor: COLORS.white,
+    borderTopWidth:  1,
+    borderTopColor:  COLORS.border,
+    paddingTop:      10,
+    elevation:       10,
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: -2 },
+    shadowOpacity:   0.06,
+    shadowRadius:    4,
+  },
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
+    flexDirection:     'row',
+    alignItems:        'flex-end',
+    gap:               10,
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom:     8,
   },
   input: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.lg,
+    flex:              1,
+    backgroundColor:   COLORS.background,
+    borderRadius:      RADIUS.lg,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: COLORS.textPrimary,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    maxHeight: 100,
-    minHeight: 44,
+    paddingVertical:   12,
+    fontSize:          14,
+    fontFamily:        FONTS.regular,
+    color:             COLORS.textPrimary,
+    borderWidth:       1.5,
+    borderColor:       COLORS.border,
+    maxHeight:         100,
+    minHeight:         44,
   },
   sendBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 15,
+    width:           46,
+    height:          46,
+    borderRadius:    15,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    alignItems:      'center',
+    justifyContent:  'center',
+    elevation:       6,
+    shadowColor:     COLORS.primary,
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.3,
+    shadowRadius:    4,
   },
   sendBtnOff: {
     backgroundColor: COLORS.primaryMid,
-    elevation: 0,
-    shadowOpacity: 0,
+    elevation:       0,
+    shadowOpacity:   0,
   },
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Rich bubble styles
-// ─────────────────────────────────────────────────────────────────────────────
 
 const rb = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 18,
-    borderBottomLeftRadius: 5,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    maxWidth: W * 0.8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    elevation: 2,
-    gap: 12,
-    marginBottom: 4,
-  },
-  emergencyBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#DC2626', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  emergencyText:   { fontSize: 12, fontWeight: '700', color: '#fff', flex: 1 },
-  answerText:      { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary, fontWeight: '500' },
-  bulletsSection:  { backgroundColor: COLORS.primaryLight, borderRadius: 12, padding: 12, gap: 8 },
+  card:                { backgroundColor: COLORS.white, borderRadius: 18, borderBottomLeftRadius: 5, paddingHorizontal: 16, paddingVertical: 14, maxWidth: W * 0.8, borderWidth: 1, borderColor: COLORS.border, elevation: 2, gap: 12, marginBottom: 4 },
+  emergencyBanner:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#DC2626', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  emergencyText:       { fontSize: 12, fontWeight: '700', color: '#fff', flex: 1 },
+  answerText:          { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary, fontWeight: '500' },
+  bulletsSection:      { backgroundColor: COLORS.primaryLight, borderRadius: 12, padding: 12, gap: 8 },
   bulletsSectionLabel: { fontSize: 11, fontWeight: '800', color: COLORS.primary, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
-  bulletRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  bulletDot:       { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
-  bulletDotText:   { fontSize: 10, fontWeight: '800', color: '#fff' },
-  bulletText:      { fontSize: 13, lineHeight: 20, color: COLORS.textPrimary, flex: 1 },
-  sourceBadge:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F9FF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#BAE6FD' },
-  sourceText:      { fontSize: 11, color: COLORS.primary, fontWeight: '600', flex: 1 },
-  timeText:        { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 4 },
+  bulletRow:           { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  bulletDot:           { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  bulletDotText:       { fontSize: 10, fontWeight: '800', color: '#fff' },
+  bulletText:          { fontSize: 13, lineHeight: 20, color: COLORS.textPrimary, flex: 1 },
+  sourceBadge:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F9FF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#BAE6FD' },
+  sourceText:          { fontSize: 11, color: COLORS.primary, fontWeight: '600', flex: 1 },
+  timeText:            { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 4 },
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bubble styles
-// ─────────────────────────────────────────────────────────────────────────────
 
 const b = StyleSheet.create({
   userRow:    { alignItems: 'flex-end', marginBottom: 16 },
@@ -735,10 +762,6 @@ const b = StyleSheet.create({
   aiText:     { fontSize: 14, lineHeight: 22, color: COLORS.textPrimary },
   aiTime:     { fontSize: 10, color: COLORS.textMuted, marginTop: 6 },
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Pill styles
-// ─────────────────────────────────────────────────────────────────────────────
 
 const pill = StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full, borderWidth: 1 },

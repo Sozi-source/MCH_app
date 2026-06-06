@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
   inputLabel:             { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 6, marginTop: 4 },
   input:                  { borderWidth: 1, borderColor: COLORS.border ?? '#E8ECF0', borderRadius: RADIUS.md ?? 10, padding: 12, fontSize: 15, marginBottom: 4, color: COLORS.textPrimary, backgroundColor: COLORS.surface ?? '#F7F8FA' },
   inputRow:               { flexDirection: 'row', marginBottom: 4 },
-  modalBtn:               { backgroundColor: COLORS.primary, borderRadius: RADIUS.md ?? 10, padding: 14, alignItems: 'center', marginTop: 16 },
+  modalBtn:               { backgroundColor: COLORS.primary, borderRadius: RADIUS.md ?? 10, padding: 14, alignItems: 'center', marginTop: 14, marginBottom: 12 },
   modalBtnText:           { color: COLORS.white, fontSize: 16, fontWeight: '600' },
   errorBox:               { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FCEBEB', borderRadius: RADIUS.md ?? 10, padding: 10, marginBottom: 12 },
   errorText:              { color: '#A32D2D', fontSize: 13, flex: 1 },
