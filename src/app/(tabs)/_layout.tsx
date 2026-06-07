@@ -59,9 +59,8 @@ export default function TabLayout() {
           borderTopColor: 'transparent',
           borderTopWidth: 0,
           // Enough internal padding so icons+labels aren't clipped
-          paddingBottom: 14,
-          paddingTop: 10,
-          height: 70,
+          paddingBottom: 8,
+          height: 60,
           // Sits just above the Android nav bar
           marginBottom: 40,
           marginHorizontal: 16,

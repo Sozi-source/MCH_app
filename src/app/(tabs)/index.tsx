@@ -35,6 +35,25 @@ function getAgeMonths(dob: string) {
   return Math.max(0, months);
 }
 
+/** Precise age: "3 mo 2 wk" for <12 months, otherwise getAgeLabel */
+function getPreciseAge(dob: string): string {
+  const birth = new Date(dob);
+  const now = new Date();
+  const totalDays = Math.floor((now.getTime() - birth.getTime()) / 86400000);
+  if (totalDays < 0) return '0 days';
+  const months = getAgeMonths(dob);
+  if (months < 12) {
+    const remainingDays = totalDays - months * 30; // approximate
+    const weeks = Math.floor(Math.max(0, remainingDays) / 7);
+    if (months === 0) {
+      const wks = Math.floor(totalDays / 7);
+      return wks > 0 ? `${wks} wk` : `${totalDays}d`;
+    }
+    return weeks > 0 ? `${months} mo ${weeks} wk` : `${months} mo`;
+  }
+  return getAgeLabel(dob);
+}
+
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
@@ -166,6 +185,158 @@ const sc = StyleSheet.create({
   ctaArrow:   { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
 });
 
+// ─── Welcome / Empty State ────────────────────────────────────────────────────
+function WelcomeEmptyState({ firstName, onAddChild }: { firstName: string; onAddChild: () => void }) {
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const heartAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }),
+    ]).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(heartAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+      Animated.timing(heartAnim, { toValue: 1,   duration: 800, useNativeDriver: true }),
+    ])).start();
+  }, []);
+
+  const TILES = [
+    { icon: 'trending-up',         color: '#208AEF', bg: '#EBF5FF', label: 'Growth'    },
+    { icon: 'shield-checkmark',    color: '#1D9E75', bg: '#EDFAF4', label: 'Vaccines'  },
+    { icon: 'restaurant',          color: '#FF9800', bg: '#FFF4E5', label: 'Nutrition' },
+    { icon: 'chatbubble-ellipses', color: COLORS.primary, bg: COLORS.primary + '15', label: 'Zuri AI' },
+  ];
+
+  return (
+    <Animated.View style={[we.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+
+      {/* Hero card — same style as child card */}
+      <View style={we.heroCard}>
+        <View style={we.heroAccentBar} />
+        <View style={we.heroBody}>
+          <View style={we.avatarStack}>
+            <View style={we.momRing}>
+              <View style={we.momCircle}>
+                <Text style={we.momEmoji}>👩🏾</Text>
+              </View>
+            </View>
+            <Animated.View style={[we.babyBubble, { transform: [{ scale: heartAnim }] }]}>
+              <Text style={we.babyEmoji}>👶🏾</Text>
+            </Animated.View>
+          </View>
+          <View style={we.heroText}>
+            <Text style={we.heroTitle}>Karibu, {firstName}! 🌸</Text>
+            <Text style={we.heroSub}>Add your child to get started</Text>
+          </View>
+          <TouchableOpacity style={we.heroArrow} onPress={onAddChild} activeOpacity={0.8}>
+            <Ionicons name="chevron-forward-circle-outline" size={28} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={we.tilesRow}>
+          {TILES.map((t, i) => (
+            <View key={i} style={[we.tile, { backgroundColor: t.bg }]}>
+              <Ionicons name={t.icon as any} size={18} color={t.color} />
+              <Text style={[we.tileLabel, { color: t.color }]}>{t.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <TouchableOpacity style={we.ctaBtn} onPress={onAddChild} activeOpacity={0.88}>
+        <Ionicons name="add-circle-outline" size={20} color="#fff" />
+        <Text style={we.ctaBtnText}>Add your child</Text>
+        <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.7)" />
+      </TouchableOpacity>
+
+    </Animated.View>
+  );
+}
+
+const we = StyleSheet.create({
+  container: { marginBottom: 14 },
+
+  heroCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    marginBottom: 12,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 10,
+  },
+  heroAccentBar: { height: 4, backgroundColor: '#F06292' },
+  heroBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+  },
+
+  avatarStack: { position: 'relative', width: 62, height: 62, flexShrink: 0 },
+  momRing: {
+    width: 62, height: 62, borderRadius: 31,
+    borderWidth: 2.5, borderColor: '#F48FB1',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  momCircle: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: '#FCE4EC',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  momEmoji: { fontSize: 26 },
+  babyBubble: {
+    position: 'absolute', bottom: -4, right: -8,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 2, borderColor: '#FFD6E0',
+    alignItems: 'center', justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3,
+  },
+  babyEmoji: { fontSize: 14 },
+
+  heroText: { flex: 1 },
+  heroTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A', letterSpacing: -0.4, marginBottom: 3 },
+  heroSub:   { fontSize: 12, color: '#64748B', fontWeight: '500' },
+  heroArrow: { flexShrink: 0, opacity: 0.75 },
+
+  tilesRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: '#FAFCFF',
+  },
+  tile: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, gap: 5,
+  },
+  tileLabel: { fontSize: 10, fontWeight: '700' },
+
+  ctaBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    elevation: 6,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  ctaBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
+});
+
+// ─── Main screen ─────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { session, signOut } = useAuthStore();
@@ -176,6 +347,7 @@ export default function HomeScreen() {
   const firstName   = session?.user?.user_metadata?.full_name?.split(' ')[0] ?? 'Mama';
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
   const ageMonths   = activeChild?.date_of_birth ? getAgeMonths(activeChild.date_of_birth) : 0;
+  const hasChildren = children.length > 0;
 
   useFocusEffect(useCallback(() => {
     if (!activeChild?.id) return;
@@ -217,22 +389,37 @@ export default function HomeScreen() {
       <View style={[styles.fixedHeader, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerOrb1} />
         <View style={styles.headerOrb2} />
+        <View style={styles.headerOrb3} />
+
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.greeting}>{getGreeting()}, {firstName} 👋</Text>
-            {activeChild ? (
+            <View style={styles.greetingRow}>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+              {!hasChildren && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>New</Text>
+                </View>
+              )}
+            </View>
+            {hasChildren && activeChild ? (
               <View style={styles.childNameRow}>
-                <Text style={styles.childName}>{toTitleCase(activeChild.full_name)}</Text>
+                <Text style={styles.headerChildName} numberOfLines={1}>
+                  {toTitleCase(activeChild.full_name)}
+                </Text>
                 <View style={styles.agePill}>
-                  <Text style={styles.agePillText}>{getAgeLabel(activeChild.date_of_birth)}</Text>
+                  <Text style={styles.agePillText}>{getPreciseAge(activeChild.date_of_birth)}</Text>
                 </View>
               </View>
             ) : (
-              <Text style={styles.childName}>No child selected</Text>
+              <Text style={styles.headerWelcomeName}>{firstName} 🌸</Text>
+            )}
+            {!hasChildren && (
+              <Text style={styles.headerTagline}>Your baby's health companion</Text>
             )}
           </View>
+
           <View style={styles.headerRight}>
-            {(dueVaccines.length > 0 || missedVaccines.length > 0) && (
+            {hasChildren && (dueVaccines.length > 0 || missedVaccines.length > 0) && (
               <TouchableOpacity
                 style={[styles.alertPill, { backgroundColor: missedVaccines.length > 0 ? COLORS.missed : COLORS.due }]}
                 onPress={() => router.push('/(tabs)/vaccines')}
@@ -251,49 +438,99 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Header stats strip — only when child exists, now with precise age */}
+        {hasChildren && activeChild && (
+          <View style={styles.headerStatsStrip}>
+            <View style={styles.headerStat}>
+              <Text style={styles.headerStatVal}>
+                {latestGrowth ? `${latestGrowth.weight_kg} kg` : '—'}
+              </Text>
+              <Text style={styles.headerStatLbl}>Weight</Text>
+            </View>
+            <View style={styles.headerStatDiv} />
+            <View style={styles.headerStat}>
+              <Text style={styles.headerStatVal}>
+                {vaccineTotal > 0 ? `${vaccineGiven}/${vaccineTotal}` : '—'}
+              </Text>
+              <Text style={styles.headerStatLbl}>Vaccines</Text>
+            </View>
+            <View style={styles.headerStatDiv} />
+            <View style={styles.headerStat}>
+              <Text style={styles.headerStatVal}>{getPreciseAge(activeChild.date_of_birth)}</Text>
+              <Text style={styles.headerStatLbl}>Age</Text>
+            </View>
+            <View style={styles.headerStatDiv} />
+            <TouchableOpacity
+              style={styles.headerStatAction}
+              onPress={() => router.push('/(tabs)/children')}
+            >
+              <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.headerStatLbl}>{children.length} {children.length === 1 ? 'Child' : 'Children'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* ── SCROLLABLE CONTENT ───────────────────────────────────────── */}
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
 
-        {/* ── UNIFIED CHILD CARD ─────────────────────────────────────── */}
-        {activeChild ? (
-          <View style={styles.unifiedCard}>
+        {/* ── NEW USER: Welcome empty state ──────────────────────────── */}
+        {!hasChildren && (
+          <WelcomeEmptyState
+            firstName={firstName}
+            onAddChild={() => router.push('/(tabs)/children')}
+          />
+        )}
 
-            {/* Top section: white — avatar + name/dob + arrow */}
-            <View style={styles.cardTopSection}>
-              <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-                <Text style={styles.avatarText}>
-                  {(activeChild.full_name?.[0] ?? '?').toUpperCase()}
-                </Text>
-                <View style={[styles.genderDot, { backgroundColor: genderColor }]}>
-                  <Ionicons name={isFemale ? 'female' : 'male'} size={9} color="#fff" />
+        {/* ── RETURNING USER: Redesigned Child Card ──────────────────── */}
+        {hasChildren && activeChild && (
+          <View style={cc.card}>
+            {/* Soft gradient top accent bar */}
+            <View style={[cc.accentBar, { backgroundColor: isFemale ? '#F06292' : '#42A5F5' }]} />
+
+            {/* Top section: avatar + info + arrow */}
+            <View style={cc.topRow}>
+              {/* Avatar with glow ring */}
+              <View style={[cc.avatarRing, { borderColor: isFemale ? '#F48FB1' : '#90CAF9' }]}>
+                <View style={[cc.avatar, { backgroundColor: avatarBg }]}>
+                  <Text style={[cc.avatarInitial, { color: genderColor }]}>
+                    {(activeChild.full_name?.[0] ?? '?').toUpperCase()}
+                  </Text>
+                </View>
+                {/* Gender dot */}
+                <View style={[cc.genderDot, { backgroundColor: genderColor }]}>
+                  <Ionicons name={isFemale ? 'female' : 'male'} size={8} color="#fff" />
                 </View>
               </View>
 
-              <View style={styles.cardMeta}>
-                <Text style={styles.cardChildName} numberOfLines={1}>
+              {/* Name + DOB + gender pill */}
+              <View style={cc.nameMeta}>
+                <Text style={cc.childName} numberOfLines={1}>
                   {toTitleCase(activeChild.full_name)}
                 </Text>
-                <Text style={styles.cardDob} numberOfLines={1}>
-                  Born{' '}
-                  {new Date(activeChild.date_of_birth).toLocaleDateString('en-KE', {
+                <Text style={cc.dob}>
+                  Born {new Date(activeChild.date_of_birth).toLocaleDateString('en-KE', {
                     day: 'numeric', month: 'short', year: 'numeric',
                   })}
                 </Text>
-                <View style={[styles.genderTag, { backgroundColor: avatarBg }]}>
-                  <Ionicons name={isFemale ? 'female' : 'male'} size={10} color={genderColor} />
-                  <Text style={[styles.genderTagText, { color: genderColor }]}>
+                <View style={[cc.genderPill, { backgroundColor: avatarBg }]}>
+                  <Ionicons name={isFemale ? 'female' : 'male'} size={9} color={genderColor} />
+                  <Text style={[cc.genderPillText, { color: genderColor }]}>
                     {isFemale ? 'Girl' : 'Boy'}
                   </Text>
                 </View>
               </View>
 
               <TouchableOpacity
-                style={styles.cardArrow}
+                style={cc.editBtn}
                 onPress={() => router.push('/(tabs)/children')}
               >
-                <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+                <Ionicons name="chevron-forward-circle-outline" size={28} color={COLORS.primary} />
               </TouchableOpacity>
             </View>
 
@@ -302,20 +539,24 @@ export default function HomeScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={styles.switcherScroll}
-                contentContainerStyle={styles.switcherContent}
+                style={cc.switcherScroll}
+                contentContainerStyle={cc.switcherContent}
               >
                 {children.map(c => {
                   const active  = c.id === activeChild.id;
                   const cFemale = c.sex === 'female';
+                  const cColor  = cFemale ? '#E91E63' : '#1565C0';
+                  const cBg     = cFemale ? '#FCE4EC' : '#E3F2FD';
                   return (
                     <TouchableOpacity
                       key={c.id}
-                      style={[styles.switchPill, active && styles.switchPillActive]}
+                      style={[cc.switchPill, active && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
                       onPress={() => selectChild(c.id)}
                     >
-                      <Ionicons name={cFemale ? 'female' : 'male'} size={10} color={active ? '#fff' : COLORS.primary} />
-                      <Text style={[styles.switchText, active && styles.switchTextActive]}>
+                      <View style={[cc.switchDot, { backgroundColor: active ? 'rgba(255,255,255,0.4)' : cBg }]}>
+                        <Ionicons name={cFemale ? 'female' : 'male'} size={8} color={active ? '#fff' : cColor} />
+                      </View>
+                      <Text style={[cc.switchText, active && cc.switchTextActive]}>
                         {c.full_name.split(' ')[0]}
                       </Text>
                     </TouchableOpacity>
@@ -324,73 +565,10 @@ export default function HomeScreen() {
               </ScrollView>
             )}
 
-            {/* ── Tinted stats panel (Option A) ── */}
-            <View style={styles.statsPanel}>
-              {/* Weight */}
-              <View style={styles.statCol}>
-                <View style={[styles.statIconCircle, { backgroundColor: '#D6ECFF' }]}>
-                  <Ionicons name="barbell-outline" size={14} color="#208AEF" />
-                </View>
-                <Text style={styles.statVal}>
-                  {latestGrowth ? `${latestGrowth.weight_kg} kg` : '—'}
-                </Text>
-                <Text style={styles.statLbl}>Weight</Text>
-                <Text style={[styles.statSub, {
-                  color: latestGrowth?.waz != null && latestGrowth.waz < -2 ? COLORS.missed : COLORS.given,
-                }]}>
-                  {latestGrowth?.waz != null ? (latestGrowth.waz >= -2 ? 'Normal' : 'Low') : 'No data'}
-                </Text>
-              </View>
-
-              <View style={styles.statDivider} />
-
-              {/* Vaccines */}
-              <View style={styles.statCol}>
-                <View style={[styles.statIconCircle, { backgroundColor: '#D6ECFF' }]}>
-                  <Ionicons name="shield-checkmark-outline" size={14} color="#208AEF" />
-                </View>
-                <Text style={styles.statVal}>
-                  {vaccineTotal > 0 ? `${vaccineGiven}/${vaccineTotal}` : '—'}
-                </Text>
-                <Text style={styles.statLbl}>Vaccines</Text>
-                <Text style={[styles.statSub, {
-                  color: missedVaccines.length > 0 ? COLORS.missed : dueVaccines.length > 0 ? COLORS.due : COLORS.given,
-                }]}>
-                  {missedVaccines.length > 0
-                    ? `${missedVaccines.length} missed`
-                    : dueVaccines.length > 0
-                    ? `${dueVaccines.length} due`
-                    : 'Up to date'}
-                </Text>
-              </View>
-
-              <View style={styles.statDivider} />
-
-              {/* Age */}
-              <View style={styles.statCol}>
-                <View style={[styles.statIconCircle, { backgroundColor: '#D6ECFF' }]}>
-                  <Ionicons name="calendar-outline" size={14} color="#208AEF" />
-                </View>
-                <Text style={styles.statVal}>{getAgeLabel(activeChild.date_of_birth)}</Text>
-                <Text style={styles.statLbl}>Age</Text>
-                <Text style={[styles.statSub, { color: COLORS.textMuted }]}>
-                  {ageMonths < 6 ? 'Infant' : ageMonths < 24 ? 'Baby' : 'Toddler'}
-                </Text>
-              </View>
-            </View>
           </View>
-        ) : (
-          <TouchableOpacity style={styles.addChildCard} onPress={() => router.push('/(tabs)/children')}>
-            <View style={styles.addIcon}><Ionicons name="add" size={24} color="#fff" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.addTitle}>Add your first child</Text>
-              <Text style={styles.addSub}>Track growth, vaccines and milestones</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
-          </TouchableOpacity>
         )}
 
-        {/* Quick Actions */}
+        {/* Quick Actions — always visible */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Access</Text>
           <View style={styles.actionsGrid}>
@@ -448,102 +626,157 @@ export default function HomeScreen() {
   );
 }
 
+// ─── Child Card styles ────────────────────────────────────────────────────────
+const cc = StyleSheet.create({
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    marginBottom: 14,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 10,
+  },
+  accentBar: {
+    height: 4,
+    width: '100%',
+  },
+
+  // Avatar
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  avatarRing: {
+    width: 62, height: 62,
+    borderRadius: 31,
+    borderWidth: 2.5,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+    position: 'relative',
+  },
+  avatar: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  genderDot: {
+    position: 'absolute',
+    bottom: 0, right: 0,
+    width: 18, height: 18, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fff',
+  },
+
+  // Name meta
+  nameMeta: { flex: 1, gap: 3 },
+  childName: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.4,
+  },
+  dob: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  genderPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 20,
+    marginTop: 2,
+  },
+  genderPillText: { fontSize: 10, fontWeight: '700' },
+
+  editBtn: {
+    flexShrink: 0,
+    opacity: 0.75,
+  },
+
+  // Switcher
+  switcherScroll: { paddingHorizontal: 16, marginBottom: 12 },
+  switcherContent: { gap: 6, paddingRight: 4 },
+  switchPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  switchDot: {
+    width: 16, height: 16, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  switchText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  switchTextActive: { color: '#fff' },
+
+});
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F0F4F8' },
 
   // Header
   fixedHeader: {
-    backgroundColor: COLORS.primary, paddingHorizontal: 16, paddingBottom: 16,
-    overflow: 'hidden', elevation: 8, shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, zIndex: 10,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    zIndex: 10,
   },
-  headerOrb1:    { position: 'absolute', width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.07)', top: -50, right: -30 },
-  headerOrb2:    { position: 'absolute', width: 90,  height: 90,  borderRadius: 45, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -30, left: 50 },
-  headerRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  greeting:      { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '500', marginBottom: 3 },
-  childNameRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  childName:     { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
-  agePill:       { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
-  agePillText:   { fontSize: 11, fontWeight: '700', color: '#fff' },
-  headerRight:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  alertPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 12, marginRight: 4 },
-  alertPillText: { fontSize: 10, fontWeight: '700', color: '#fff' },
-  iconBtn:       { padding: 6 },
+  headerOrb1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.07)', top: -70, right: -50 },
+  headerOrb2: { position: 'absolute', width: 100, height: 100, borderRadius: 50,  backgroundColor: 'rgba(255,255,255,0.05)', bottom: -35, left: 40 },
+  headerOrb3: { position: 'absolute', width: 60,  height: 60,  borderRadius: 30,  backgroundColor: 'rgba(255,255,255,0.04)', top: 10, left: -20 },
 
-  // Scroll
-  scroll:   { flex: 1 },
-  content:  { paddingTop: 16, paddingHorizontal: 16 },
+  headerRow:         { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 12 },
+  greetingRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+  greeting:          { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  newBadge:          { backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  newBadgeText:      { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  childNameRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  headerChildName:   { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  headerWelcomeName: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.5, marginBottom: 2 },
+  headerTagline:     { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '500' },
+  agePill:           { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  agePillText:       { fontSize: 11, fontWeight: '700', color: '#fff' },
+  headerRight:       { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 2 },
+  alertPill:         { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 12, marginRight: 4 },
+  alertPillText:     { fontSize: 10, fontWeight: '700', color: '#fff' },
+  iconBtn:           { padding: 6 },
 
-  // ── Unified child card ──
-  unifiedCard: {
-    backgroundColor: '#fff', borderRadius: 20,
-    marginBottom: 12, overflow: 'hidden',       // clip tinted panel to card corners
-    elevation: 3, shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8,
-  },
-
-  // White top section
-  cardTopSection: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 12, padding: 16, paddingBottom: 14,
-  },
-  avatar: {
-    width: 54, height: 54, borderRadius: 27,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  avatarText: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
-  genderDot:  {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 17, height: 17, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#fff',
-  },
-  cardMeta:      { flex: 1, gap: 3 },
-  cardChildName: { fontSize: 16, fontWeight: '800', color: '#1A202C', letterSpacing: -0.3 },
-  cardDob:       { fontSize: 12, color: COLORS.textMuted, fontWeight: '500' },
-  genderTag:     {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 2,
-    borderRadius: 20, marginTop: 1,
-  },
-  genderTagText: { fontSize: 10, fontWeight: '700' },
-  cardArrow: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-
-  // Child switcher
-  switcherScroll:   { paddingHorizontal: 16, marginBottom: 12 },
-  switcherContent:  { gap: 6, paddingRight: 4 },
-  switchPill:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: COLORS.primaryLight, borderWidth: 1, borderColor: COLORS.primary + '30' },
-  switchPillActive: { backgroundColor: COLORS.primary },
-  switchText:       { fontSize: 11, fontWeight: '600', color: COLORS.primary },
-  switchTextActive: { color: '#fff' },
-
-  // ── Tinted stats panel ──
-  statsPanel: {
+  headerStatsStrip: {
     flexDirection: 'row',
-    backgroundColor: '#F0F7FF',               // the Option A tint
-    borderTopWidth: 1,
-    borderTopColor: '#DDEEFF',
-    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
   },
-  statCol: { flex: 1, alignItems: 'center', gap: 4 },
-  statDivider: { width: 1, backgroundColor: '#DDEEFF', marginVertical: 6 },
-  statIconCircle: {
-    width: 28, height: 28, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
-  },
-  statVal: { fontSize: 14, fontWeight: '800', color: '#1A202C' },
-  statLbl: { fontSize: 10, color: COLORS.textMuted, fontWeight: '500' },
-  statSub: { fontSize: 9, fontWeight: '700' },
+  headerStat:       { flex: 1, alignItems: 'center', gap: 2 },
+  headerStatAction: { flex: 1, alignItems: 'center', gap: 2 },
+  headerStatVal:    { fontSize: 14, fontWeight: '800', color: '#fff' },
+  headerStatLbl:    { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontWeight: '500' },
+  headerStatDiv:    { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.2)' },
 
-  // Add child placeholder
-  addChildCard: { backgroundColor: '#fff', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed' },
-  addIcon:      { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  addTitle:     { fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  addSub:       { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  scroll:  { flex: 1 },
+  content: { paddingTop: 16, paddingHorizontal: 16 },
 
   // Quick Actions
   section:       { marginBottom: 12 },
@@ -552,18 +785,18 @@ const styles = StyleSheet.create({
   actionCard:    { width: '47.5%', borderRadius: 16, overflow: 'hidden', height: 84 },
   actionContent: { flex: 1, padding: 10, justifyContent: 'space-between' },
   actionTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  actionIconWrap: { width: 28, height: 28, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  actionIconWrap:{ width: 28, height: 28, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
   actionEmoji:   { fontSize: 16 },
   actionLabel:   { fontSize: 13, fontWeight: '800', color: '#fff' },
   actionDesc:    { fontSize: 10, color: 'rgba(255,255,255,0.8)' },
   actionDecor:   { position: 'absolute', bottom: -14, right: -14, width: 50, height: 50, borderRadius: 25, borderWidth: 14, borderColor: 'rgba(255,255,255,0.1)' },
 
   // Zuri
-  zuriCard:    { backgroundColor: COLORS.primaryLight, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: COLORS.primary + '25', marginBottom: 0 },
-  zuriLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  zuriAvatar:  { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', backgroundColor: COLORS.primaryLight },
-  zuriTitle:   { fontSize: 14, fontWeight: '800', color: '#1A202C' },
-  zuriSub:     { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
-  zuriBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: COLORS.primary + '35' },
-  zuriBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  zuriCard:   { backgroundColor: COLORS.primaryLight, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: COLORS.primary + '25', marginBottom: 0 },
+  zuriLeft:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  zuriAvatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', backgroundColor: COLORS.primaryLight },
+  zuriTitle:  { fontSize: 14, fontWeight: '800', color: '#1A202C' },
+  zuriSub:    { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  zuriBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: COLORS.primary + '35' },
+  zuriBtnText:{ fontSize: 13, fontWeight: '700', color: COLORS.primary },
 });

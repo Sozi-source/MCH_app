@@ -1,0 +1,281 @@
+# ZuriHealth — Play Store Fix Instructions
+# Apply all fixes in this order.
+
+=============================================================
+FIX 1: API KEY SECURITY (CRITICAL — do this first)
+=============================================================
+
+## 1a. Deploy Supabase Edge Functions
+
+From your project root in PowerShell:
+
+  npx supabase login
+  npx supabase link --project-ref 26fd1a97-b4cb-421b-99d7-24428a1d0fe6
+
+Copy the three Edge Function folders into your project:
+
+  supabase/
+    functions/
+      zuri-chat/index.ts      ← AI chat
+      zuri-zscore/index.ts    ← Z-score calculation
+      zuri-meal/index.ts      ← Meal suggestions
+
+Then deploy all three:
+
+  npx supabase functions deploy zuri-chat
+  npx supabase functions deploy zuri-zscore
+  npx supabase functions deploy zuri-meal
+
+## 1b. Set the Groq API key as a secret (NOT in .env)
+
+  npx supabase secrets set GROQ_API_KEY=your_actual_groq_key_here
+
+## 1c. Update your .env file
+
+Remove these two lines from .env:
+  EXPO_PUBLIC_GROQ_API_KEY=...
+  EXPO_PUBLIC_ANTHROPIC_API_KEY=...   (if present)
+
+Keep ONLY these two:
+  EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+  EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+
+## 1d. Replace src/lib/zscore.ts
+
+Replace the entire file with the one provided in:
+  fixes/src/lib/zscore.ts
+
+## 1e. Patch src/app/(tabs)/chat.tsx
+
+Open chat.tsx and make these changes:
+
+  REMOVE from top of file:
+    const GROQ_API_URL = ...
+    const GROQ_API_KEY = ...
+    const GROQ_MODEL   = ...
+
+  ADD this import (if supabase not already imported):
+    import { supabase } from '@/lib/supabase';
+
+  REPLACE the sendMessage function with the one in:
+    fixes/src/app/tabs/chat.PATCH.ts
+
+
+=============================================================
+FIX 2: PACKAGE.JSON — remove bad dependencies
+=============================================================
+
+Replace package.json with fixes/package.json.
+
+Then run:
+  npm install
+
+Changes made:
+  - Removed: react-native-html-to-pdf  (use expo-print instead — already in your deps)
+  - Removed: react-native-linear-gradient  (use expo-linear-gradient instead)
+  - Moved:   @expo/ngrok → devDependencies  (dev tool, not for production)
+
+If any screen imports react-native-linear-gradient, replace with:
+  import { LinearGradient } from 'expo-linear-gradient';
+  (same API, drop-in replacement)
+
+If any screen imports react-native-html-to-pdf, remove it.
+reports.tsx already uses expo-print correctly — no change needed there.
+
+
+=============================================================
+FIX 3: APP.JSON — permissions + adaptive icon
+=============================================================
+
+Replace app.json with fixes/app.json.
+
+Changes made:
+  - Added android.permissions array (RECEIVE_BOOT_COMPLETED, VIBRATE,
+    READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE)
+  - Changed adaptiveIcon.foregroundImage to ./assets/images/adaptive-icon.png
+
+## 3a. Create the adaptive icon
+
+You need TWO separate icon files:
+
+  assets/images/icon.png
+    → 1024×1024px, no transparency, used for the Play Store listing icon.
+    → This already exists. Ensure it has NO transparent background.
+
+  assets/images/adaptive-icon.png
+    → 1024×1024px WITH transparency
+    → The ZuriHealth logo/mark centered with generous padding (~20% on each side)
+    → The logo should NOT fill the entire canvas — leave room for Android to
+       apply its own shape masking (circle, squircle, etc.)
+    → Background will be supplied by app.json backgroundColor: "#E6F4FE"
+
+To create this quickly in PowerShell using ImageMagick (if installed):
+  magick assets/images/icon.png -resize 614x614 -gravity center `
+    -background none -extent 1024x1024 assets/images/adaptive-icon.png
+
+Or open your icon in any image editor, paste it centered on a transparent
+1024×1024 canvas with padding, and export as PNG.
+
+
+=============================================================
+FIX 4: PRIVACY POLICY
+=============================================================
+
+## 4a. Add the in-app privacy screen
+
+Copy fixes/src/app/privacy.tsx into your project:
+  src/app/privacy.tsx
+
+This screen is already linked from settings.tsx via router.push('/privacy').
+No further changes needed in settings.tsx.
+
+## 4b. Host a public privacy policy URL
+
+The Play Store requires a publicly accessible URL (not just in-app).
+
+Option A — GitHub Pages (free, 5 minutes):
+  1. Create a file docs/privacy.html in your repo
+  2. Enable GitHub Pages on the repo (Settings → Pages → branch: main, folder: /docs)
+  3. Your URL will be: https://sozi-source.github.io/MCH_app/privacy.html
+
+Option B — Vercel (free):
+  Create a simple HTML file and deploy it.
+
+The privacy policy content from privacy.tsx is your source — just convert it
+to a simple HTML page. Submit this URL in Play Console → App content → Privacy policy.
+
+
+=============================================================
+FIX 5: MEDICAL DISCLAIMER IN CHAT
+=============================================================
+
+Open src/app/(tabs)/chat.tsx.
+
+Find the initial welcome message (around line where messages state is initialised):
+  const [messages, setMessages] = useState<Message[]>([{
+    id:    '0',
+    role:  'assistant',
+    content: `Habari! I'm Zuri...`
+
+Add a disclaimer as a second initial message:
+
+  {
+    id:        'disclaimer',
+    role:      'assistant',
+    content:   '⚕️ Important: Zuri provides general health information grounded in WHO and Kenya MoH guidelines. This is not a substitute for professional medical advice. Always consult your MCH nurse or doctor for clinical decisions.',
+    timestamp: new Date(),
+  }
+
+So messages initialises as an array of TWO messages: the welcome + the disclaimer.
+
+
+=============================================================
+FIX 6: PLAY CONSOLE — DATA SAFETY FORM
+=============================================================
+
+In Google Play Console → App content → Data safety, declare:
+
+COLLECTED DATA:
+  ✅ Personal info → Name, Email address → Required for account creation
+  ✅ Health & fitness → Health information (weight, height, vaccines, growth records)
+  ✅ App activity → App interactions, In-app search history (AI chat logs)
+  ✅ Device or other IDs → Device ID (for push notifications)
+
+DATA SHARING (sent to third parties):
+  ✅ Health & fitness data → Groq Inc. → For AI meal suggestions and z-score calculation
+     (Note: data is processed server-side, not stored by Groq)
+
+DATA SECURITY:
+  ✅ Data is encrypted in transit
+  ✅ Users can request data deletion (via privacy@zurihealth.co.ke)
+
+
+=============================================================
+FIX 7: CONTENT RATING
+=============================================================
+
+In Play Console → App content → Content rating:
+  Complete the IARC questionnaire.
+  Answer: No violence, No adult content, No gambling, No user-generated public content.
+  Expected rating: Everyone (E) or Everyone 10+
+
+Target audience:
+  Select Adults (18+) — the app is for parents and healthcare workers,
+  not directed at children.
+
+
+=============================================================
+STORE LISTING CONTENT (to fill in Play Console)
+=============================================================
+
+APP TITLE (30 chars max):
+  ZuriHealth – Child Health
+
+SHORT DESCRIPTION (80 chars max):
+  Track child growth, vaccines & nutrition with AI-powered MCH guidance.
+
+FULL DESCRIPTION (use this as a starting point, expand to ~2000 chars):
+
+  ZuriHealth is a maternal and child health companion built for Kenyan
+  mothers and community health workers.
+
+  GROWTH TRACKING
+  Record your child's weight, height, and head circumference. ZuriHealth
+  calculates WHO z-scores (WAZ, HAZ, WHZ) and plots growth against WHO
+  reference curves so you can spot concerns early.
+
+  VACCINE SCHEDULE
+  Full Kenya KEPI schedule — 23 doses from birth to 24 months. Track
+  which vaccines have been given, which are due, and which are overdue.
+  Get automatic reminders before each vaccine is due.
+
+  NUTRITION GUIDANCE
+  WHO IYCF feeding guidance tailored to your child's age — from exclusive
+  breastfeeding through complementary foods to family meals. Check food
+  group diversity with the WHO Minimum Dietary Diversity tool. Get AI-
+  generated Kenyan meal ideas personalised to your child's age and growth.
+
+  ZURI AI ASSISTANT
+  Ask Zuri anything about your child's health. Powered by AI and grounded
+  in WHO, UNICEF, Kenya MoH, and Nelson Pediatrics guidelines. Available
+  in English and Kiswahili. Zuri uses your child's actual growth and
+  vaccine data to give personalised, relevant answers.
+
+  DEVELOPMENTAL MILESTONES
+  Track motor, language, cognitive, and social milestones from 2 months
+  to 5 years. See progress at a glance and know what to expect next.
+
+  HEALTH REPORTS
+  Export a full health report as PDF — growth trends, z-score history,
+  vaccine coverage, and milestone summary.
+
+  BUILT FOR KENYA
+  Grounded in Kenya KEPI, Kenya MCH Handbook, Kenya IMAM Guidelines,
+  and WHO standards. Available in English and Kiswahili.
+
+  ⚕️ ZuriHealth provides health information and tracking tools. It does
+  not replace the advice of a qualified healthcare provider.
+
+CATEGORY: Medical or Health & Fitness
+
+=============================================================
+FINAL CHECKLIST BEFORE SUBMITTING
+=============================================================
+
+  [ ] Edge Functions deployed and GROQ_API_KEY secret set
+  [ ] EXPO_PUBLIC_GROQ_API_KEY removed from .env
+  [ ] zscore.ts replaced with Edge Function version
+  [ ] chat.tsx sendMessage updated to use supabase.functions.invoke
+  [ ] package.json updated (ngrok moved, rn-html-to-pdf removed)
+  [ ] adaptive-icon.png created (1024×1024 with transparency and padding)
+  [ ] app.json updated (permissions + adaptive icon path)
+  [ ] privacy.tsx added to src/app/
+  [ ] Privacy policy hosted at a public URL
+  [ ] Play Console: Data Safety form completed
+  [ ] Play Console: Content rating completed
+  [ ] Play Console: Target audience set to Adults (18+)
+  [ ] Play Console: Store listing filled (title, description, screenshots)
+  [ ] Screenshots captured (min 2, recommended 5-8)
+  [ ] Feature graphic prepared (1024×500px)
+  [ ] eas build --platform android --profile production
+  [ ] eas submit --platform android

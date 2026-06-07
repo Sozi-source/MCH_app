@@ -1,10 +1,10 @@
 /**
  * src/app/(tabs)/chat.tsx
- * ZuriHealth — Premium Chat Screen
+ * ZuriHealth - Premium Chat Screen
  *
  * Keyboard handling: mirrors NutritionScreen pattern exactly.
  * - KeyboardAvoidingView behavior="height" (Android) / "padding" (iOS)
- * - Inline input with paddingBottom: TAB_OFFSET + 8 (hardcoded — chat is a
+ * - Inline input with paddingBottom: TAB_OFFSET + 8 (hardcoded - chat is a
  *   hidden tab so useBottomTabBarHeight() returns 0)
  * - No ChatInputBar component, no Keyboard listeners, no marginBottom tricks
  */
@@ -39,12 +39,8 @@ import {
 
 const { width: W } = Dimensions.get('window');
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
-const GROQ_MODEL   = 'llama-3.3-70b-versatile';
-
 // Floating tab bar: position absolute, bottom 10, height 70
-// chat is a hidden tab so useBottomTabBarHeight() returns 0 — hardcode it
+// chat is a hidden tab so useBottomTabBarHeight() returns 0 - hardcode it
 const TAB_OFFSET = 102;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +138,7 @@ function RichAIBubble({ content, timeStr }: { content: string; timeStr: string }
       {parsed.emergency && (
         <View style={rb.emergencyBanner}>
           <Ionicons name="warning" size={14} color="#fff" />
-          <Text style={rb.emergencyText}>EMERGENCY — Go to hospital NOW or call 999</Text>
+          <Text style={rb.emergencyText}>EMERGENCY - Go to hospital NOW or call 999</Text>
         </View>
       )}
       {parsed.answer.length > 0 && (
@@ -186,7 +182,7 @@ function buildSystemPrompt(ctx: ChildContext): string {
     if (ctx.weightTrendKg.length >= 2) {
       const diff = ctx.weightTrendKg[ctx.weightTrendKg.length - 1] - ctx.weightTrendKg[0];
       const sign = diff >= 0 ? '+' : '';
-      trendNote  = `\n  - Weight trend (last ${ctx.weightTrendKg.length} records): ${sign}${diff.toFixed(2)} kg — ${diff >= 0 ? 'gaining' : 'losing'} weight`;
+      trendNote  = `\n  - Weight trend (last ${ctx.weightTrendKg.length} records): ${sign}${diff.toFixed(2)} kg - ${diff >= 0 ? 'gaining' : 'losing'} weight`;
     }
     growthSection = `Latest (${ctx.latestMeasureDate ?? 'unknown'}, age ${ctx.latestAgeAtMeasure ?? ctx.ageMonths}mo):
   - Weight: ${ctx.latestWeight}kg (WAZ ${ctx.waz?.toFixed(2) ?? 'N/A'} = ${wazLabel})
@@ -217,12 +213,12 @@ Name: ${ctx.name} | Age: ${ctx.ageMonths}mo | Sex: ${ctx.sex} | DOB: ${ctx.dobSt
 ${birthInfo}
 Growth: ${growthSection}
 Vaccines: ${vaccineSection}
-Feeding: ${ctx.feedingStageLabel} — ${ctx.feedingStageDescription} ${ctx.feedingExtra}
+Feeding: ${ctx.feedingStageLabel} - ${ctx.feedingStageDescription} ${ctx.feedingExtra}
 Milestones: ${milestoneSection}
 
 LANGUAGE: ${ctx.language === 'sw' ? 'Respond in Swahili' : 'Respond in English'}. Match the mother's language if she switches.
 
-RESPONSE FORMAT — always follow this exact structure:
+RESPONSE FORMAT - always follow this exact structure:
 [1-3 sentence direct answer in plain language]
 
 - [practical step 1]
@@ -234,11 +230,11 @@ Source: [specific guideline name and year]
 RULES:
 - Under 150 words total. Direct, warm, no jargon.
 - Use the child's actual name and real data from the profile above.
-- If WAZ < -2, missed vaccines, or WHZ shows MAM/SAM — acknowledge it proactively.
+- If WAZ < -2, missed vaccines, or WHZ shows MAM/SAM - acknowledge it proactively.
 - Never ask for info already in the profile.
 - Only use: WHO IYCF Guidelines, WHO Child Growth Standards 2006, WHO IMCI, Kenya KEPI Schedule, Kenya MCH Handbook, Kenya KIMNCI, Nelson Pediatrics 21st Ed, UNICEF IYCF Cards.
 - No medication dosages, no diagnosis, no herbal remedies.
-- For danger signs (difficulty breathing, seizures, severe dehydration, newborn fever): start with "EMERGENCY — Go to the nearest hospital NOW or call 999."
+- For danger signs (difficulty breathing, seizures, severe dehydration, newborn fever): start with "EMERGENCY - Go to the nearest hospital NOW or call 999."
 - End serious symptom responses with: "Please confirm this with your MCH nurse or doctor."
 - Refer nutrition prescriptions to MCH nutritionist.
 - Physical exam needed: "I recommend visiting your nearest MCH clinic."`;
@@ -382,11 +378,14 @@ export default function ChatScreen() {
 
   const activeChild = children.find(c => c.id === selectedChildId) ?? children[0];
 
+  // FIX 1: Correct age calculation accounting for day-of-month
   const getAgeMonths = (): number => {
     if (!activeChild?.date_of_birth) return 0;
     const dob = new Date(activeChild.date_of_birth);
     const now = new Date();
-    return (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+    let months = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+    if (now.getDate() < dob.getDate()) months -= 1;
+    return Math.max(0, months);
   };
 
   const [milestoneData, setMilestoneData] = React.useState<{
@@ -423,8 +422,8 @@ export default function ChatScreen() {
   }, [activeChild?.id]);
 
   const buildChildContext = (): ChildContext => {
-    const ageMonths   = getAgeMonths();
-    const latest      = growthRecords[0] ?? null;
+    const ageMonths      = getAgeMonths();
+    const latest         = growthRecords[0] ?? null;
     const countByStatus  = (s: string) => vaccineRows.filter(r => r.status === s).length;
     const namesByStatus  = (s: string): string[] =>
       vaccineRows
@@ -438,6 +437,16 @@ export default function ChatScreen() {
     const feedingParts: string[] = [];
     if (feedingStage?.mealsPerDay) feedingParts.push(`Meals/day: ${feedingStage.mealsPerDay}`);
     if (feedingStage?.foodGroups)  feedingParts.push(`Food groups: ${feedingStage.foodGroups}`);
+
+    // FIX 2: Proper feeding stage label for older children
+    let feedingLabel = feedingStage?.stage;
+    if (!feedingLabel) {
+      if (ageMonths >= 24) {
+        feedingLabel = `${Math.floor(ageMonths / 12)} years old - family foods`;
+      } else {
+        feedingLabel = `${ageMonths} months`;
+      }
+    }
 
     return {
       name:                      activeChild?.full_name ?? 'your child',
@@ -467,7 +476,7 @@ export default function ChatScreen() {
       vaccineTotal:              vaccineRows.length,
       dueVaccineNames:           namesByStatus('due'),
       missedVaccineNames:        namesByStatus('missed'),
-      feedingStageLabel:         feedingStage?.stage        ?? `${ageMonths} months`,
+      feedingStageLabel:         feedingLabel,
       feedingStageDescription:   feedingStage?.breastfeeding ?? feedingStage?.mealsPerDay ?? '',
       feedingExtra:              feedingParts.join('\n'),
       milestonesTotal:           milestoneData.total,
@@ -479,14 +488,13 @@ export default function ChatScreen() {
     };
   };
 
-  // ── Chat state ─────────────────────────────────────────────────────────────
-
+  // ── Chat state ──────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([{
     id:        '0',
     role:      'assistant',
     content:   activeChild
-      ? `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more — all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
-      : `Habari! I'm Zuri, your ZuriHealth assistant 💙\n\nPlease select a child from the Children tab first, then I can give you personalised advice based on their health profile.`,
+      ? `Habari! I'm Zuri, your ZuriHealth assistant 🤝\n\nI can see ${activeChild.full_name}'s health profile and I'm ready to help with feeding, growth, vaccines, and more - all based on WHO and Kenya MoH guidelines.\n\nWhat would you like to know today?`
+      : `Habari! I'm Zuri, your ZuriHealth assistant 🤝\n\nPlease add your child from the Children tab first, then I can give you personalised advice based on their health profile.`,
     timestamp: new Date(),
   }]);
 
@@ -501,6 +509,27 @@ export default function ChatScreen() {
   const sendMessage = async () => {
     const msg = input.trim();
     if (!msg || loading) return;
+
+    // FIX 3: No child added yet - don't call AI with empty context
+    if (!activeChild) {
+      const id      = Date.now().toString();
+      const replyId = (Date.now() + 1).toString();
+      const userMsg: Message = { id, role: 'user', content: msg, timestamp: new Date() };
+      setMessages(prev => [
+        ...prev,
+        userMsg,
+        {
+          id:        replyId,
+          role:      'assistant',
+          content:   'To get personalised advice, please add your child first using the Children tab. Once added, I can give you guidance tailored to their age, growth, and vaccines.',
+          timestamp: new Date(),
+        },
+      ]);
+      setNewMsgIds(prev => new Set([...prev, id, replyId]));
+      setInput('');
+      scrollToBottom();
+      return;
+    }
 
     const id      = Date.now().toString();
     const userMsg: Message = { id, role: 'user', content: msg, timestamp: new Date() };
@@ -518,17 +547,16 @@ export default function ChatScreen() {
         .filter(m => m.id !== '0')
         .map(m => ({ role: m.role, content: m.content }));
       const ctx = buildChildContext();
-      const res = await fetch(GROQ_API_URL, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_API_KEY },
-        body:    JSON.stringify({
-          model:      GROQ_MODEL,
-          max_tokens: 512,
-          messages:   [{ role: 'system', content: buildSystemPrompt(ctx) }, ...apiMessages],
-        }),
+      const { data, error } = await supabase.functions.invoke('zuri-chat', {
+        body: {
+          messages:     apiMessages,
+          systemPrompt: buildSystemPrompt(ctx),
+        },
       });
-      const data    = await res.json();
-      const reply   = data?.choices?.[0]?.message?.content ?? 'Sorry, I could not get a response. Please try again.';
+
+      const reply = (!error && data?.reply)
+        ? data.reply
+        : 'Sorry, I could not get a response. Please try again.';
       const replyId = (Date.now() + 1).toString();
       setMessages(prev => [...prev, { id: replyId, role: 'assistant', content: reply, timestamp: new Date() }]);
       setNewMsgIds(prev => new Set([...prev, replyId]));
@@ -542,14 +570,11 @@ export default function ChatScreen() {
     }
   };
 
-  const ageMonths   = getAgeMonths();
   const hasGrowth   = growthRecords.length > 0;
   const hasVaccines = vaccineRows.length > 0;
   const hasMissed   = vaccineRows.some(r => r.status === 'missed');
   const hasDue      = vaccineRows.some(r => r.status === 'due');
   const canSend     = input.trim().length >= 1 && !loading;
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
@@ -557,7 +582,7 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* ── Header ───────────────────────────────────────────────────── */}
+      {/* ── Header ── */}
       <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <View style={s.headerOrb1} />
         <View style={s.headerOrb2} />
@@ -608,7 +633,7 @@ export default function ChatScreen() {
         )}
       </View>
 
-      {/* ── Messages ─────────────────────────────────────────────────── */}
+      {/* ── Messages ── */}
       <ScrollView
         ref={scrollRef}
         style={s.messageList}
@@ -624,7 +649,7 @@ export default function ChatScreen() {
         <View style={{ height: 16 }} />
       </ScrollView>
 
-      {/* ── Input bar — mirrors NutritionScreen pattern exactly ──────── */}
+      {/* ── Input bar ── */}
       <View style={[s.inputWrapper, { paddingBottom: TAB_OFFSET + 8 }]}>
         <View style={s.inputBar}>
           <TextInput
@@ -682,7 +707,6 @@ const s = StyleSheet.create({
   messageList:    { flex: 1 },
   messageContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
 
-  // Input — mirrors NutritionScreen s.inputWrapper / s.inputBar exactly
   inputWrapper: {
     backgroundColor: COLORS.white,
     borderTopWidth:  1,
